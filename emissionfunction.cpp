@@ -214,8 +214,11 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
               double mu = surf->particle_mu[last_particle_idx];
 
               double tau = surf->tau;
-              double vx = surf->vx;
-              double vy = surf->vy;
+              double ux = surf->u1;
+              double uy = surf->u2;
+              double u0 = sqrt(1. + ux*ux + uy*uy);
+              double vx = ux/u0;
+              double vy = uy/u0;
 
               double da0 = surf->da0;
               double da1 = surf->da1;
