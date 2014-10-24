@@ -267,8 +267,10 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf
          surfdat >> dummy;
          surf_ptr[i].pi33 = dummy*hbarC;
          if(turn_on_bulk == 1)
+         {
              surfdat >> dummy;
              surf_ptr[idx].bulkPi = dummy*hbarC;
+         }
          else
              surf_ptr[idx].bulkPi = 0.0;
          surfdat.getline(rest_dummy, 512);
@@ -346,8 +348,10 @@ void read_FOdata::read_FOsurfdat_MUSIC(int length, FO_surf* surf_ptr)
      surfdat >> dummy;
      surf_ptr[i].pi33 = dummy*hbarC;
      if(turn_on_bulk == 1)
+     {
          surfdat >> dummy;
          surf_ptr[i].bulkPi = dummy*hbarC;
+     }
      else
          surf_ptr[i].bulkPi = 0.0;
   }
