@@ -15,11 +15,13 @@
 
 using namespace std;
 
-read_FOdata::read_FOdata(ParameterReader* paraRdr_in)
+read_FOdata::read_FOdata(ParameterReader* paraRdr_in, string path_in)
 {
    paraRdr = paraRdr_in;
+   path = path_in;
    mode = paraRdr->getVal("mode");
    turn_on_bulk = paraRdr->getVal("turn_on_bulk");
+   n_eta_skip = 0;
 }
 
 read_FOdata::~read_FOdata()
@@ -33,74 +35,90 @@ int read_FOdata::get_number_of_freezeout_cells()
    if (mode == 0)  // outputs from VISH2+1
    {
       ostringstream decdatfile;
-      decdatfile << "results/decdat2.dat";
+      decdatfile << path << "/decdat2.dat";
       Table block_file(decdatfile.str().c_str());
       number_of_cells = block_file.getNumberOfRows();
    }
    else if (mode == 1)  // outputs from MUSIC boost-invariant
    {
-      Table block_file("tobeadded");
-      number_of_cells = block_file.getNumberOfRows();
+      ostringstream surface_file;
+      surface_file << path << "/surface.dat";
+      Table block_file(surface_file.str().c_str());
+
+      // determine number of the eta slides that are output
+      double eta = block_file.get(4, 1);
+      int n_eta = 1;
+      while(block_file.get(4, n_eta+1) != eta)
+      {
+          n_eta++;
+      }
+      n_eta_skip = n_eta;
+      number_of_cells = block_file.getNumberOfRows()/n_eta;
    }
    else if (mode == 2)  // outputs from MUSIC full (3+1)-d
    {
-      Table block_file("tobeadded");
+      ostringstream surface_file;
+      surface_file << path << "/surface.dat";
+      Table block_file(surface_file.str().c_str());
       number_of_cells = block_file.getNumberOfRows();
    }
  
    return(number_of_cells);
 }
 
-void read_FOdata::read_in_freeze_out_data(string path, int length, FO_surf* surf_ptr)
+void read_FOdata::read_in_freeze_out_data(int length, FO_surf* surf_ptr)
 {
    if(mode == 0)
-      read_FOsurfdat_VISH2p1(path, length, surf_ptr);
+      read_FOsurfdat_VISH2p1(length, surf_ptr);
+   else if (mode == 1)
+      read_FOsurfdat_MUSIC_boost_invariant(length, surf_ptr);
+
    return;
 }
 
 int read_FOdata::read_in_chemical_potentials(string path, int FO_length, FO_surf* surf_ptr, particle_info* particle_ptr)
 {
    int Nparticle = 0;
-   if(mode == 0)
+   int N_stableparticle;
+   ifstream particletable("EOS/EOS_particletable.dat");
+   particletable >> N_stableparticle;
+   particletable.close();
+   
+   //read particle resonance decay table
+   for (int i = 0; i < Maxparticle; i++) 
+       particle_ptr[i].decays = 0; // to avoid infinite loop
+   Nparticle = read_resonances_list(particle_ptr);
+   cout << "total number of particle species: " << Nparticle << endl;
+
+   if(N_stableparticle > 0)
    {
-       int N_stableparticle;
-       ifstream particletable("EOS/EOS_particletable.dat");
-       particletable >> N_stableparticle;
-       particletable.close();
+       cout << " -- EOS is partically chemical equilibrium " << endl;
        double** particle_mu = new double* [N_stableparticle];
        for(int i = 0; i < N_stableparticle; i++)
            particle_mu[i] = new double [FO_length];
-       if(N_stableparticle > 0)
-           read_decdat_mu(path, FO_length, N_stableparticle, particle_mu);
 
-       //read particle resonance decay table
-       for (int i = 0; i < Maxparticle; i++) 
-           particle_ptr[i].decays=0; // to avoid infinite loop
-       Nparticle = read_resonances_list(particle_ptr);
-       cout << "total number of particle species: " << Nparticle << endl;
+       if(mode == 0)
+           read_decdat_mu(FO_length, N_stableparticle, particle_mu);
+       else if (mode == 1)
+           cout << " to be added" << endl;
 
-       if(N_stableparticle > 0)
-       {
-          cout << " -- EOS is partically chemical equilibrium " << endl;
-          calculate_particle_mu(Nparticle, surf_ptr, FO_length, particle_ptr, particle_mu);
-       }
-       else
-       {
-          cout << " -- EOS is chemical equilibrium. " << endl;
-          for(int i = 0; i < Nparticle; i++)
-            for(int j = 0; j < FO_length; j++)
-               surf_ptr[j].particle_mu[i] = 0.0e0;
-       }
-
+       calculate_particle_mu(Nparticle, surf_ptr, FO_length, particle_ptr, particle_mu);
        for(int i = 0; i < N_stableparticle; i++)
            delete [] particle_mu[i];
        delete [] particle_mu;
+   }
+   else
+   {
+      cout << " -- EOS is chemical equilibrium. " << endl;
+      for(int i = 0; i < Nparticle; i++)
+        for(int j = 0; j < FO_length; j++)
+           surf_ptr[j].particle_mu[i] = 0.0e0;
    }
 
    return(Nparticle);
 }
 
-void read_FOdata::read_decdat(string path, int length, FO_surf* surf_ptr)
+void read_FOdata::read_decdat(int length, FO_surf* surf_ptr)
 {
   double temp, temp_vx, temp_vy;
   cout<<" -- Read in information on freeze out surface...";
@@ -153,7 +171,7 @@ void read_FOdata::read_decdat(string path, int length, FO_surf* surf_ptr)
   return;
 }
 
-void read_FOdata::read_surfdat(string path, int length, FO_surf* surf_ptr)
+void read_FOdata::read_surfdat(int length, FO_surf* surf_ptr)
 {
   cout<<" -- Read spatial positions of freeze out surface...";
   ostringstream surfdat_stream;
@@ -173,76 +191,89 @@ void read_FOdata::read_surfdat(string path, int length, FO_surf* surf_ptr)
   return;
 }
 
-void read_FOdata::read_FOsurfdat_VISH2p1(string path, int length, FO_surf* surf_ptr)
+void read_FOdata::read_FOsurfdat_VISH2p1(int length, FO_surf* surf_ptr)
 {
   cout << " -- Loading the decoupling data from VISH2+1 ...." << endl;
   //read the data arrays for the decoupling information
-  read_decdat(path, length, surf_ptr);
+  read_decdat(length, surf_ptr);
   //read the positions of the freeze out surface
-  read_surfdat(path, length, surf_ptr);
+  read_surfdat(length, surf_ptr);
   return;
 }
 
-void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(string path, int length, FO_surf* surf_ptr)
+void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf_ptr)
 {
   cout<<" -- Read spatial positions of freeze out surface from MUSIC (boost-invariant) ...";
   ostringstream surfdat_stream;
   double dummy;
   double temp;
+  int idx = 0;
   char rest_dummy[512];
   surfdat_stream << path << "/surface.dat";
   ifstream surfdat(surfdat_stream.str().c_str());
-  for(int i=0; i<length; i++)
+  for(int i = 0; i < length*n_eta_skip; i++)
   {
-     // freeze out position
-     surfdat >> surf_ptr[i].tau;
-     surfdat >> surf_ptr[i].xpt;
-     surfdat >> surf_ptr[i].ypt;
-     surfdat >> surf_ptr[i].eta;
+     if( i%n_eta_skip == 0)
+     {
+         // freeze out position
+         surfdat >> surf_ptr[idx].tau;
+         surfdat >> surf_ptr[idx].xpt;
+         surfdat >> surf_ptr[idx].ypt;
+         surfdat >> surf_ptr[idx].eta;
 
-     // freeze out normal vectors
-     surfdat >> surf_ptr[i].da0;
-     surfdat >> surf_ptr[i].da1;
-     surfdat >> surf_ptr[i].da2;
-     surfdat >> surf_ptr[i].da3;
+         // freeze out normal vectors
+         surfdat >> surf_ptr[idx].da0;
+         surfdat >> surf_ptr[idx].da1;
+         surfdat >> surf_ptr[idx].da2;
+         surfdat >> surf_ptr[idx].da3;
 
-     // flow velocity
-     surfdat >> surf_ptr[i].u0;
-     surfdat >> surf_ptr[i].u1;
-     surfdat >> surf_ptr[i].u2;
-     surfdat >> surf_ptr[i].u3;
+         // flow velocity
+         surfdat >> surf_ptr[idx].u0;
+         surfdat >> surf_ptr[idx].u1;
+         surfdat >> surf_ptr[idx].u2;
+         surfdat >> surf_ptr[idx].u3;
 
-     // thermodynamic quantities at freeze out
-     surfdat >> surf_ptr[i].Edec;   
-     surfdat >> surf_ptr[i].Tdec;
-     surfdat >> surf_ptr[i].muB;
-     surfdat >> dummy;              // (e+P)/T
-     surf_ptr[i].Pdec = dummy*surf_ptr[i].Tdec - surf_ptr[i].Edec;
-     surf_ptr[i].Bn = 0.0;
-     surf_ptr[i].muS = 0.0;
+         // thermodynamic quantities at freeze out
+         surfdat >> dummy;
+         surf_ptr[idx].Edec = dummy*hbarC;   
+         surfdat >> dummy;
+         surf_ptr[idx].Tdec = dummy*hbarC;
+         surfdat >> dummy;
+         surf_ptr[idx].muB = dummy*hbarC;
+         surfdat >> dummy;              // (e+P)/T
+         surf_ptr[idx].Pdec = dummy*surf_ptr[idx].Tdec - surf_ptr[idx].Edec;
+         surf_ptr[idx].Bn = 0.0;
+         surf_ptr[idx].muS = 0.0;
 
-     // dissipative quantities at freeze out
-     surfdat >> surf_ptr[i].pi00;
-     surfdat >> surf_ptr[i].pi01;
-     surfdat >> surf_ptr[i].pi02;
-     surfdat >> surf_ptr[i].pi03;
-     surfdat >> surf_ptr[i].pi11;
-     surfdat >> surf_ptr[i].pi12;
-     surfdat >> surf_ptr[i].pi13;
-     surfdat >> surf_ptr[i].pi22;
-     surfdat >> surf_ptr[i].pi23;
-     surfdat >> surf_ptr[i].pi33;
-     if(turn_on_bulk == 1)
-         surfdat >> surf_ptr[i].bulkPi;
+         // dissipative quantities at freeze out
+         surfdat >> surf_ptr[idx].pi00;
+         surfdat >> surf_ptr[idx].pi01;
+         surfdat >> surf_ptr[idx].pi02;
+         surfdat >> surf_ptr[idx].pi03;
+         surfdat >> surf_ptr[idx].pi11;
+         surfdat >> surf_ptr[idx].pi12;
+         surfdat >> surf_ptr[idx].pi13;
+         surfdat >> surf_ptr[idx].pi22;
+         surfdat >> surf_ptr[idx].pi23;
+         surfdat >> surf_ptr[idx].pi33;
+         if(turn_on_bulk == 1)
+             surfdat >> surf_ptr[idx].bulkPi;
+         else
+             surf_ptr[idx].bulkPi = 0.0;
+         surfdat.getline(rest_dummy, 512);
+         idx++;
+     }
      else
-         surf_ptr[i].bulkPi = 0.0;
+     {
+         surfdat.getline(rest_dummy, 512);
+     }
   }
   surfdat.close();
   cout << "done" << endl;
   return;
 }
 
-void read_FOdata::read_FOsurfdat_MUSIC(string path, int length, FO_surf* surf_ptr)
+void read_FOdata::read_FOsurfdat_MUSIC(int length, FO_surf* surf_ptr)
 {
   cout<<" -- Read spatial positions of freeze out surface from MUSIC...";
   ostringstream surfdat_stream;
@@ -271,9 +302,12 @@ void read_FOdata::read_FOsurfdat_MUSIC(string path, int length, FO_surf* surf_pt
      surfdat >> surf_ptr[i].u3;
 
      // thermodynamic quantities at freeze out
-     surfdat >> surf_ptr[i].Edec;
-     surfdat >> surf_ptr[i].Tdec;
-     surfdat >> surf_ptr[i].muB;
+     surfdat >> dummy;
+     surf_ptr[i].Edec = dummy*hbarC;
+     surfdat >> dummy;
+     surf_ptr[i].Tdec = dummy*hbarC;
+     surfdat >> dummy;
+     surf_ptr[i].muB = dummy*hbarC;
      surfdat >> dummy;                    //(e+p)/T
      surf_ptr[i].Pdec = dummy*surf_ptr[i].Tdec - surf_ptr[i].Edec;
      surf_ptr[i].Bn = 0.0;
@@ -300,7 +334,7 @@ void read_FOdata::read_FOsurfdat_MUSIC(string path, int length, FO_surf* surf_pt
   return;
 }
 
-void read_FOdata::read_decdat_mu(string path, int FO_length, int N_stable, double** particle_mu)
+void read_FOdata::read_decdat_mu(int FO_length, int N_stable, double** particle_mu)
 {
   cout<<" -- Read chemical potential for stable particles...";
   ostringstream decdat_mu_stream;

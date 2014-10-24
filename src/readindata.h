@@ -45,22 +45,24 @@ class read_FOdata
 {
     private:
         ParameterReader* paraRdr;
+        string path;
         int mode;
         int turn_on_bulk;
+        int n_eta_skip;
 
     public:
-        read_FOdata(ParameterReader* paraRdr_in);
+        read_FOdata(ParameterReader* paraRdr_in, string path);
         ~read_FOdata();
         
         int get_number_of_freezeout_cells();
-        void read_in_freeze_out_data(string path, int length, FO_surf* surf_ptr);
+        void read_in_freeze_out_data(int length, FO_surf* surf_ptr);
         int read_in_chemical_potentials(string path, int FO_length, FO_surf* surf_ptr, particle_info* particle_ptr);
-        void read_decdat(string path, int length, FO_surf* surf_ptr);
-        void read_surfdat(string path, int length, FO_surf* surf_ptr);
-        void read_FOsurfdat_VISH2p1(string path, int length, FO_surf* surf_ptr);
-        void read_FOsurfdat_MUSIC(string path, int length, FO_surf* surf_ptr);
-        void read_FOsurfdat_MUSIC_boost_invariant(string path, int length, FO_surf* surf_ptr);
-        void read_decdat_mu(string path, int FO_length, int N_stable, double** particle_mu);
+        void read_decdat(int length, FO_surf* surf_ptr);
+        void read_surfdat(int length, FO_surf* surf_ptr);
+        void read_FOsurfdat_VISH2p1(int length, FO_surf* surf_ptr);
+        void read_FOsurfdat_MUSIC(int length, FO_surf* surf_ptr);
+        void read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf_ptr);
+        void read_decdat_mu(int FO_length, int N_stable, double** particle_mu);
         int read_resonances_list(particle_info* particle);
         void calculate_particle_mu(int Nparticle, FO_surf* FOsurf_ptr, int FO_length, particle_info* particle, double** particle_mu);
 
