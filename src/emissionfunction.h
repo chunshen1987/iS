@@ -5,11 +5,21 @@
 #include<vector>
 #include "Table.h"
 #include "main.h"
+#include "ParameterReader.h"
 using namespace std;
 
 class EmissionFunctionArray
 {
 private:
+  ParameterReader* paraRdr;
+
+  int CALCULATEDED3P;
+  int INCLUDE_BULKDELTAF, INCLUDE_DELTAF;
+  int GROUPING_PARTICLES;
+  double PARTICLE_DIFF_TOLERANCE;
+  int USE_HISTORIC_FORMAT;
+  int F0_IS_NOT_SMALL;
+
   double particle_y;
   Table *pT_tab, *phi_tab, *eta_tab;
   int pT_tab_length, phi_tab_length, eta_tab_length;
@@ -29,7 +39,7 @@ private:
   Table *bulkdf_coeff;
 
 public:
-  EmissionFunctionArray(double particle_y_in, Table* chosen_particle, Table* pT_tab_in, Table* phi_tab_in, Table* eta_tab_in, particle_info* particles_in, int Nparticles, FO_surf* FOsurf_ptr_in, long FO_length_in);
+  EmissionFunctionArray(ParameterReader* paraRdr_in, double particle_y_in, Table* chosen_particle, Table* pT_tab_in, Table* phi_tab_in, Table* eta_tab_in, particle_info* particles_in, int Nparticles, FO_surf* FOsurf_ptr_in, long FO_length_in);
   ~EmissionFunctionArray();
 
   void calculate_dN_ptdptdphidy(int);

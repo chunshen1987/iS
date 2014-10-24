@@ -12,22 +12,17 @@
 #include "emissionfunction.h"
 #include "Stopwatch.h"
 #include "arsenal.h"
+#include "ParameterReader.h"
 
 #define AMOUNT_OF_OUTPUT 0 // smaller value means less outputs
-#define F0_IS_NOT_SMALL 0 // set to 0 to agree with Azspectra; set to 1 for reality
-#define USE_HISTORIC_FORMAT 0 // 0: use new way of outputting
-#define GROUPING_PARTICLES 1 // set to 1 to perform calculations for similar particles together
-#define PARTICLE_DIFF_TOLERANCE 0.01 // particles with mass and chemical potential (for each FZ-cell) difference less than this value will be considered to be identical (b/c Cooper-Frye)
-#define INCLUDE_DELTAF 1 // include delta f correction to particle distribution function in Cooper-Frye Formula
-#define INCLUDE_BULKDELTAF 0 // include delta f correction to particle distribution function in Cooper-Frye Formula
-#define CALCULATEDED3P false // calculate transverse energy distribution E*dE/d^3p from Cooper-Frye formula
 
 using namespace std;
 
 
 // Class EmissionFunctionArray ------------------------------------------
-EmissionFunctionArray::EmissionFunctionArray(double particle_y_in, Table* chosen_particles_in, Table* pT_tab_in, Table* phi_tab_in, Table* eta_tab_in, particle_info* particles_in, int Nparticles_in, FO_surf* FOsurf_ptr_in, long FO_length_in)
+EmissionFunctionArray::EmissionFunctionArray(ParameterReader* paraRdr_in, double particle_y_in, Table* chosen_particles_in, Table* pT_tab_in, Table* phi_tab_in, Table* eta_tab_in, particle_info* particles_in, int Nparticles_in, FO_surf* FOsurf_ptr_in, long FO_length_in)
 {
+  paraRdr = paraRdr_in;
   particle_y = particle_y_in;
   pT_tab = pT_tab_in; pT_tab_length = pT_tab->getNumberOfRows();
   phi_tab = phi_tab_in; phi_tab_length = phi_tab->getNumberOfRows();
@@ -36,7 +31,15 @@ EmissionFunctionArray::EmissionFunctionArray(double particle_y_in, Table* chosen
   dN_ptdptdphidy = new Table(pT_tab_length, phi_tab_length);
   dN_ptdptdphidy_filename = "results/dN_ptdptdphidy.dat";
 
-  if(CALCULATEDED3P)
+  CALCULATEDED3P = paraRdr->getVal("calculate_dEd3p");
+  INCLUDE_BULKDELTAF = paraRdr->getVal("turn_on_bulk");
+  INCLUDE_DELTAF = paraRdr->getVal("turn_on_shear");
+  GROUPING_PARTICLES = paraRdr->getVal("grouping_particles");
+  PARTICLE_DIFF_TOLERANCE = paraRdr->getVal("particle_diff_tolerance");
+  USE_HISTORIC_FORMAT = paraRdr->getVal("use_historic_format");
+  F0_IS_NOT_SMALL = paraRdr->getVal("f0_is_not_small");
+
+  if(CALCULATEDED3P == 1)
   {
      dE_ptdptdphidy = new Table(pT_tab_length, phi_tab_length);
      dE_ptdptdphidy_filename = "results/dE_ptdptdphidy.dat";
@@ -82,7 +85,7 @@ EmissionFunctionArray::EmissionFunctionArray(double particle_y_in, Table* chosen
     }
   }
   // next re-order them so that particles with similar mass are adjacent
-  if (GROUPING_PARTICLES) // sort particles according to their mass; bubble-sorting
+  if (GROUPING_PARTICLES == 1) // sort particles according to their mass; bubble-sorting
   {
     for (int m=0; m<number_of_chosen_particles; m++)
       for (int n=0; n<number_of_chosen_particles-m-1; n++)
@@ -99,7 +102,7 @@ EmissionFunctionArray::EmissionFunctionArray(double particle_y_in, Table* chosen
   flow_integrated_filename_old = "results/v2data-inte.dat";
   flow_differential_filename = "results/thermal_%d_vndata.dat";
   flow_integrated_filename = "results/thermal_%d_integrated_vndata.dat";
-  if(CALCULATEDED3P)
+  if(CALCULATEDED3P == 1)
   {
      energyflow_differential_filename_old =  "results/ET_v2data.dat";
      energyflow_integrated_filename_old = "results/ET_v2data-inte.dat";
@@ -116,7 +119,7 @@ EmissionFunctionArray::EmissionFunctionArray(double particle_y_in, Table* chosen
 EmissionFunctionArray::~EmissionFunctionArray()
 {
   delete dN_ptdptdphidy;
-  if(CALCULATEDED3P) delete dE_ptdptdphidy;
+  if(CALCULATEDED3P == 1) delete dE_ptdptdphidy;
   delete[] chosen_particles_01_table;
   delete[] chosen_particles_sampling_table;
   delete bulkdf_coeff;
@@ -277,12 +280,12 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
                      result = prefactor*degen*f0*(1. + deltaf + bulk_deltaf)*pdsigma*tau;
 
                   dN_ptdptdphidy_tmp += result*delta_eta;
-                  if(CALCULATEDED3P) dE_ptdptdphidy_tmp += result*delta_eta*mT;
+                  if(CALCULATEDED3P == 1) dE_ptdptdphidy_tmp += result*delta_eta*mT;
               } // k
           } // l
 
           dN_ptdptdphidy_tab[i][j] = dN_ptdptdphidy_tmp;
-          if (CALCULATEDED3P) dE_ptdptdphidy_tab[i][j] = dE_ptdptdphidy_tmp;
+          if (CALCULATEDED3P == 1) dE_ptdptdphidy_tab[i][j] = dE_ptdptdphidy_tmp;
           if (AMOUNT_OF_OUTPUT>0) print_progressbar((i*phi_tab_length+j)/progress_total);
       }
   //cout << int(100.0*(i+1)/pT_tab_length) << "% completed" << endl;
@@ -293,7 +296,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
   for (int j=0; j<phi_tab_length; j++)
   {
     dN_ptdptdphidy->set(i+1,j+1,dN_ptdptdphidy_tab[i][j]);
-    if(CALCULATEDED3P) dE_ptdptdphidy->set(i+1,j+1,dE_ptdptdphidy_tab[i][j]);
+    if(CALCULATEDED3P == 1) dE_ptdptdphidy->set(i+1,j+1,dE_ptdptdphidy_tab[i][j]);
   }
 
   delete [] bulkvisCoefficients;
@@ -309,7 +312,7 @@ void EmissionFunctionArray::write_dN_ptdptdphidy_toFile()
   dN_ptdptdphidy->printTable(of1);
   of1.close();
 
-  if(CALCULATEDED3P)
+  if(CALCULATEDED3P == 1)
   {
      ofstream of2(dE_ptdptdphidy_filename.c_str(), ios_base::app);
      dE_ptdptdphidy->printTable(of2);
@@ -586,7 +589,7 @@ void EmissionFunctionArray::calculate_Energyflows(int to_order, string flow_diff
 void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(int to_order)
 // Calculate dNArrays and flows for all particles given in chosen_particle file.
 {
-    if (USE_HISTORIC_FORMAT)
+    if (USE_HISTORIC_FORMAT == 1)
     {
           cout << endl
                <<"**********************************************************"
@@ -598,7 +601,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(int to_order
           remove(dN_ptdptdphidy_filename.c_str());
           remove(flow_differential_filename_old.c_str());
           remove(flow_integrated_filename_old.c_str());
-          if(CALCULATEDED3P)
+          if(CALCULATEDED3P == 1)
           {
              remove(dE_ptdptdphidy_filename.c_str());
              remove(energyflow_differential_filename_old.c_str());
@@ -617,7 +620,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(int to_order
             {
               cout << " -- Skipped." << endl;
               dN_ptdptdphidy->setAll(0.0);
-              if(CALCULATEDED3P) dE_ptdptdphidy->setAll(0.0);
+              if(CALCULATEDED3P == 1) dE_ptdptdphidy->setAll(0.0);
               last_particle_idx = n; // fake a "calculation"
             }
             else
@@ -637,7 +640,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(int to_order
             of2 << "# For: " << particle->name << endl;
             of2.close();
             calculate_flows(to_order, flow_differential_filename_old, flow_integrated_filename_old);
-            if(CALCULATEDED3P)
+            if(CALCULATEDED3P == 1)
             {
                ofstream of1(energyflow_differential_filename_old.c_str(), ios_base::app);
                of1 << "# Output for particle: " << particle->name << endl;
@@ -692,7 +695,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(int to_order
 
                 // Store calculated table
                 dNs[particle_idx] = new Table(*dN_ptdptdphidy);
-                if(CALCULATEDED3P) dEs[particle_idx] = new Table(*dE_ptdptdphidy);
+                if(CALCULATEDED3P == 1) dEs[particle_idx] = new Table(*dE_ptdptdphidy);
 
                 char buffer_diff[500], buffer_inte[500];
                 sprintf(buffer_diff, flow_differential_filename.c_str(), monval);
@@ -701,7 +704,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(int to_order
                 remove(buffer_inte);
                 calculate_flows(to_order, buffer_diff, buffer_inte);
                 
-                if(CALCULATEDED3P)
+                if(CALCULATEDED3P == 1)
                 {
                    sprintf(buffer_diff, energyflow_differential_filename.c_str(), monval);
                    remove(buffer_diff);
@@ -729,7 +732,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(int to_order
             }
             of.close();
 
-            if(CALCULATEDED3P)
+            if(CALCULATEDED3P == 1)
             {
                remove(dE_ptdptdphidy_filename.c_str());
                ofstream of_E(dE_ptdptdphidy_filename.c_str(), ios_base::app);
@@ -780,7 +783,7 @@ bool EmissionFunctionArray::particles_are_the_same(int idx1, int idx2)
 
 void EmissionFunctionArray::getbulkvisCoefficients(double Tdec, double* bulkvisCoefficients)
 {
-   if(INCLUDE_BULKDELTAF)
+   if(INCLUDE_BULKDELTAF == 1)
    {
       double Tdec_fm = Tdec/hbarC;  // [1/fm]
 
