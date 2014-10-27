@@ -71,7 +71,8 @@ int main(int argc, char *argv[])
 
    // check chemical potentials
    // for(int j=0; j<Nparticle; j++)
-   // cout << FOsurf_ptr[0].particle_mu[j] << endl;
+   // cout << FOsurf_ptr[0].Edec << "   " << FOsurf_ptr[0].particle_mu[j] << endl;
+   // exit(0);
 
    // Next, Zhi's turn...
 
