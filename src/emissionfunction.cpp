@@ -217,11 +217,9 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
               double mu = surf->particle_mu[last_particle_idx];
 
               double tau = surf->tau;
-              double ux = surf->u1;
-              double uy = surf->u2;
-              double u0 = sqrt(1. + ux*ux + uy*uy);
-              double vx = ux/u0;
-              double vy = uy/u0;
+              double gammaT = surf->u0;
+              double vx = surf->u1/gammaT;
+              double vy = surf->u2/gammaT;
 
               double da0 = surf->da0;
               double da1 = surf->da1;
@@ -233,12 +231,14 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
               double pi12 = surf->pi12;
               double pi22 = surf->pi22;
               double pi33 = surf->pi33;
-              double bulkPi = surf->bulkPi;
-
-              double v2 = vx*vx + vy*vy;
-              double gammaT = 1.0/sqrt(1.0 - v2);
-              
-              getbulkvisCoefficients(Tdec, bulkvisCoefficients);
+              double bulkPi;
+              if(INCLUDE_BULKDELTAF == 1)
+              {
+                  bulkPi = surf->bulkPi;
+                  getbulkvisCoefficients(Tdec, bulkvisCoefficients);
+              }
+              else
+                  bulkPi = 0.0;
 
               for (int k=0; k<eta_tab_length; k++)
               {
@@ -272,7 +272,13 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
                   //viscous corrections
                   double Wfactor = pt*pt*pi00 - 2.0*pt*px*pi01 - 2.0*pt*py*pi02 + px*px*pi11 + 2.0*px*py*pi12 + py*py*pi22 + pz*pz*pi33;
                   double deltaf = (1 - F0_IS_NOT_SMALL*sign*f0)*Wfactor*deltaf_prefactor;
-                  double bulk_deltaf = -(1. - F0_IS_NOT_SMALL*sign*f0)*bulkPi*(bulkvisCoefficients[0]*mass*mass + bulkvisCoefficients[1]*pdotu + bulkvisCoefficients[2]*pdotu*pdotu);
+
+                  double bulk_deltaf;
+                  if (INCLUDE_BULKDELTAF == 1)
+                      bulk_deltaf = -(1. - F0_IS_NOT_SMALL*sign*f0)*bulkPi*(bulkvisCoefficients[0]*mass*mass + bulkvisCoefficients[1]*pdotu + bulkvisCoefficients[2]*pdotu*pdotu);
+                  else
+                      bulk_deltaf = 0.0;
+
                   double result;
                   if(1 + deltaf + bulk_deltaf < 0.0) //set results to zero when delta f turns whole expression to negative
                      result = 0.0;

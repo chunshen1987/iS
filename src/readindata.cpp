@@ -139,7 +139,7 @@ void read_FOdata::read_decdat(int length, FO_surf* surf_ptr)
 
      decdat >> temp_vx;
      decdat >> temp_vy;
-     surf_ptr[i].u0 = sqrt(1. + temp_vx*temp_vx + temp_vy*temp_vy);
+     surf_ptr[i].u0 = 1./sqrt(1. - temp_vx*temp_vx - temp_vy*temp_vy);
      surf_ptr[i].u1 = surf_ptr[i].u0*temp_vx;
      surf_ptr[i].u2 = surf_ptr[i].u0*temp_vy;
      surf_ptr[i].u3 = 0.0;
@@ -248,8 +248,8 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf
          surf_ptr[idx].muS = 0.0;
 
          // dissipative quantities at freeze out
-         surfdat >> dummy;
-         surf_ptr[idx].pi00 = dummy*hbarC;
+         surfdat >> dummy;                  // 1/fm^4
+         surf_ptr[idx].pi00 = dummy*hbarC;  // GeV/fm^3
          surfdat >> dummy;
          surf_ptr[idx].pi01 = dummy*hbarC;
          surfdat >> dummy;
