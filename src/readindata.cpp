@@ -300,7 +300,7 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf
          surf_ptr[idx].muS = 0.0;
 
          // dissipative quantities at freeze out
-         ss >> dummy;                  // 1/fm^4
+         ss >> dummy;                       // 1/fm^4
          surf_ptr[idx].pi00 = dummy*hbarC;  // GeV/fm^3
          ss >> dummy;
          surf_ptr[idx].pi01 = dummy*hbarC;
@@ -335,6 +335,8 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf
      }
   }
   surfdat.close();
+
+  // take out deta weight
   for(int i = 0; i < length; i++)
   {
          surf_ptr[i].da0 = surf_ptr[i].da0/deta;
@@ -474,7 +476,6 @@ void read_FOdata::read_chemical_potentials_music(int FO_length, FO_surf* FOsurf_
        edec_pre = edec;
        for(int i = 0; i < N_stable; i++)
           particle_mu[i][j] = mu_table.interp(1, i+2, edec);
-       //cout << edec << "   " << particle_mu[0][j] << endl;
     }
     else
     {

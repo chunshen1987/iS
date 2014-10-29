@@ -31,6 +31,7 @@ EmissionFunctionArray::EmissionFunctionArray(ParameterReader* paraRdr_in, double
   dN_ptdptdphidy = new Table(pT_tab_length, phi_tab_length);
   dN_ptdptdphidy_filename = "results/dN_ptdptdphidy.dat";
 
+  // get control parameters
   CALCULATEDED3P = paraRdr->getVal("calculate_dEd3p");
   INCLUDE_BULKDELTAF = paraRdr->getVal("turn_on_bulk");
   INCLUDE_DELTAF = paraRdr->getVal("turn_on_shear");
@@ -69,7 +70,7 @@ EmissionFunctionArray::EmissionFunctionArray(ParameterReader* paraRdr_in, double
   }
   // next, for sampling processes
   chosen_particles_sampling_table = new int[number_of_chosen_particles];
-  // first copy the chosen_particles table, but now using indecies instead of monval
+  // first copy the chosen_particles table, but now using indices instead of monval
   int current_idx = 0;
   for (int m=0; m<number_of_chosen_particles; m++)
   {
@@ -147,7 +148,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
 
   double *bulkvisCoefficients = new double [3];
 
-  // for intermedia results
+  // for intermediate results
   double dN_ptdptdphidy_tab[pT_tab_length][phi_tab_length];
   double dE_ptdptdphidy_tab[pT_tab_length][phi_tab_length];
   for (int i=0; i<pT_tab_length; i++)
@@ -280,10 +281,11 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
                       bulk_deltaf = 0.0;
 
                   double result;
-                  if(1 + deltaf + bulk_deltaf < 0.0) //set results to zero when delta f turns whole expression to negative
-                     result = 0.0;
-                  else
-                     result = prefactor*degen*f0*(1. + deltaf + bulk_deltaf)*pdsigma*tau;
+
+                  //if(1 + deltaf + bulk_deltaf < 0.0) //set results to zero when delta f turns whole expression to negative
+                  //   result = 0.0;
+                  //else
+                  result = prefactor*degen*f0*(1. + deltaf + bulk_deltaf)*pdsigma*tau;
 
                   dN_ptdptdphidy_tmp += result*delta_eta;
                   if(CALCULATEDED3P == 1) dE_ptdptdphidy_tmp += result*delta_eta*mT;
