@@ -39,6 +39,7 @@ EmissionFunctionArray::EmissionFunctionArray(ParameterReader* paraRdr_in, double
   PARTICLE_DIFF_TOLERANCE = paraRdr->getVal("particle_diff_tolerance");
   USE_HISTORIC_FORMAT = paraRdr->getVal("use_historic_format");
   F0_IS_NOT_SMALL = paraRdr->getVal("f0_is_not_small");
+  bulk_deltaf_kind = paraRdr->getVal("bulk_deltaf_kind");
 
   if(CALCULATEDED3P == 1)
   {
@@ -184,22 +185,12 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
   if (AMOUNT_OF_OUTPUT>0) print_progressbar(-1);
 
   for (int i=0; i<pT_tab_length; i++)
-  //for (int i=0; i<1; i++) // for debug
   {
-      double pT = pT_tab->get(1,i+1); // pT_weight = pT_tab->get(2,i+1); // unused
+      double pT = pT_tab->get(1,i+1); 
       double mT = sqrt(mass*mass + pT*pT);
 
       for (int j=0; j<phi_tab_length; j++)
-      //for (int j=0; j<1; j++) // for debug
       {
-          // double phi = phi_tab->get(1,j+1), phi_weight = phi_tab->get(2,j+1); // unused
-
-          // old way
-          //double cos_phi = cos(phi);
-          //double sin_phi = sin(phi);
-          //double px = pT*cos_phi;
-          //double py = pT*sin_phi;
-          // new way
           double px = pT*trig_phi_table[j][0];
           double py = pT*trig_phi_table[j][1];
 
@@ -213,15 +204,11 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
               double Tdec = surf->Tdec;
               double Pdec = surf->Pdec;
               double Edec = surf->Edec;
-              double deltaf_prefactor = 1.0/(2.0*Tdec*Tdec*(Edec+Pdec))*INCLUDE_DELTAF;
-
               double mu = surf->particle_mu[last_particle_idx];
-
               double tau = surf->tau;
               double gammaT = surf->u0;
-              double vx = surf->u1/gammaT;
-              double vy = surf->u2/gammaT;
-
+              double ux = surf->u1;
+              double uy = surf->u2;
               double da0 = surf->da0;
               double da1 = surf->da1;
               double da2 = surf->da2;
@@ -232,37 +219,49 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
               double pi12 = surf->pi12;
               double pi22 = surf->pi22;
               double pi33 = surf->pi33;
-              double bulkPi;
+              double bulkPi = 0.0;
+              double deltaf_prefactor = 0.0;
+              double bulk_coeff1, bulk_coeff2;
+              if(INCLUDE_DELTAF)
+                  deltaf_prefactor = 1.0/(2.0*Tdec*Tdec*(Edec+Pdec));
               if(INCLUDE_BULKDELTAF == 1)
               {
-                  bulkPi = surf->bulkPi;
-                  getbulkvisCoefficients(Tdec, bulkvisCoefficients);
+                  if(bulk_deltaf_kind == 0)
+                  {
+                      bulkPi = surf->bulkPi;
+                      getbulkvisCoefficients(Tdec, bulkvisCoefficients);
+                  }
+                  else if(bulk_deltaf_kind == 1)
+                  {
+                      bulkPi = surf->bulkPi/hbarC;
+                      // parameterization from JF
+                      // A Polynomial fit to each coefficient -- X is the temperature in fm^-1
+                      // Both fits are reliable between T=100 -- 180 MeV , do not trust it beyond
+                      double Tfm = Tdec/hbarC;  // convert it to fm^-1
+                      bulk_coeff1 =  642096.624265727 - 8163329.49562861*Tfm +
+                                     47162768.4292073*pow(Tfm,2) - 162590040.002683*pow(Tfm,3) +
+                                     369637951.096896*pow(Tfm,4) - 578181331.809836*pow(Tfm,5) +
+                                     629434830.225675*pow(Tfm,6) - 470493661.096657*pow(Tfm,7) +
+                                     230936465.421*pow(Tfm,8) - 67175218.4629078*pow(Tfm,9) +
+                                     8789472.32652964*pow(Tfm,10);
+
+                      bulk_coeff2 =  1.18171174036192 - 17.6740645873717*Tfm +
+                                     136.298469057177*pow(Tfm,2) - 635.999435106846*pow(Tfm,3) +
+                                     1918.77100633321*pow(Tfm,4) - 3836.32258307711*pow(Tfm,5) +
+                                     5136.35746882372*pow(Tfm,6) - 4566.22991441914*pow(Tfm,7) +
+                                     2593.45375240886*pow(Tfm,8) - 853.908199724349*pow(Tfm,9) +
+                                     124.260460450113*pow(Tfm,10) ;
+                  }
               }
-              else
-                  bulkPi = 0.0;
 
               for (int k=0; k<eta_tab_length; k++)
               {
-                  //double eta_s = eta_tab->get(1,k+1); // unused
-
-                  // old way
-                  //double delta_eta = eta_tab->get(2,k+1);
-                  // new way
                   double delta_eta = delta_eta_tab[k];
 
-                  // old way
-                  //double cosh_y_eta = cosh(y-eta_s);
-                  //double sinh_y_eta = sinh(y-eta_s);
-
-                  // old way
-                  //double pt = mT*cosh_y_eta;
-                  //double pz = mT*sinh_y_eta;
-
-                  // new way
                   double pt = mT*hypertrig_etas_table[k][0];
                   double pz = mT*hypertrig_etas_table[k][1];
 
-                  double pdotu = gammaT*(pt*1 - px*vx - py*vy);
+                  double pdotu = pt*gammaT - px*ux - py*uy;
                   double expon = (pdotu - mu) / Tdec;
                   double f0 = 1./(exp(expon)+sign);       //thermal equilibrium distributions
 
@@ -271,21 +270,32 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
                   double pdsigma = pt*da0 + px*da1 + py*da2;
 
                   //viscous corrections
-                  double Wfactor = pt*pt*pi00 - 2.0*pt*px*pi01 - 2.0*pt*py*pi02 + px*px*pi11 + 2.0*px*py*pi12 + py*py*pi22 + pz*pz*pi33;
-                  double deltaf = (1 - F0_IS_NOT_SMALL*sign*f0)*Wfactor*deltaf_prefactor;
-
-                  double bulk_deltaf;
+                  double delta_f_shear = 0.0;
+                  if(INCLUDE_DELTAF)
+                  {
+                      double Wfactor = pt*pt*pi00 - 2.0*pt*px*pi01 - 2.0*pt*py*pi02 + px*px*pi11 + 2.0*px*py*pi12 + py*py*pi22 + pz*pz*pi33;
+                      delta_f_shear = (1 - F0_IS_NOT_SMALL*sign*f0)*Wfactor*deltaf_prefactor;
+                  }
+                  double delta_f_bulk = 0.0;
                   if (INCLUDE_BULKDELTAF == 1)
-                      bulk_deltaf = -(1. - F0_IS_NOT_SMALL*sign*f0)*bulkPi*(bulkvisCoefficients[0]*mass*mass + bulkvisCoefficients[1]*pdotu + bulkvisCoefficients[2]*pdotu*pdotu);
-                  else
-                      bulk_deltaf = 0.0;
+                  {
+                      if(bulk_deltaf_kind == 0)
+                          delta_f_bulk = -(1. - F0_IS_NOT_SMALL*sign*f0)*bulkPi*(bulkvisCoefficients[0]*mass*mass + bulkvisCoefficients[1]*pdotu + bulkvisCoefficients[2]*pdotu*pdotu);
+                      else if (bulk_deltaf_kind == 1)
+                      {
+
+                          double E_over_T = pdotu/Tdec;
+                          // bulk delta f is
+                          delta_f_bulk = -1.0*(1.-sign*f0)/E_over_T*bulk_coeff1*(mass*mass/Tdec/Tdec/3. - bulk_coeff2*E_over_T*E_over_T)*bulkPi;
+                      }
+                  }
 
                   double result;
 
                   //if(1 + deltaf + bulk_deltaf < 0.0) //set results to zero when delta f turns whole expression to negative
                   //   result = 0.0;
                   //else
-                  result = prefactor*degen*f0*(1. + deltaf + bulk_deltaf)*pdsigma*tau;
+                  result = prefactor*degen*f0*(1. + delta_f_shear + delta_f_bulk)*pdsigma*tau;
 
                   dN_ptdptdphidy_tmp += result*delta_eta;
                   if(CALCULATEDED3P == 1) dE_ptdptdphidy_tmp += result*delta_eta*mT;
