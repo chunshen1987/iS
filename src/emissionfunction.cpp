@@ -147,7 +147,12 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
 
   FO_surf* surf = &FOsurf_ptr[0];
 
-  double *bulkvisCoefficients = new double [3];
+  double *bulkvisCoefficients;
+  if(bulk_deltaf_kind == 0)
+      bulkvisCoefficients = new double [3];
+  else if (bulk_deltaf_kind == 1)
+      bulkvisCoefficients = new double [2];
+
 
   // for intermediate results
   double dN_ptdptdphidy_tab[pT_tab_length][phi_tab_length];
@@ -227,31 +232,10 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
               if(INCLUDE_BULKDELTAF == 1)
               {
                   if(bulk_deltaf_kind == 0)
-                  {
                       bulkPi = surf->bulkPi;
-                      getbulkvisCoefficients(Tdec, bulkvisCoefficients);
-                  }
                   else if(bulk_deltaf_kind == 1)
-                  {
-                      bulkPi = surf->bulkPi/hbarC;
-                      // parameterization from JF
-                      // A Polynomial fit to each coefficient -- X is the temperature in fm^-1
-                      // Both fits are reliable between T=100 -- 180 MeV , do not trust it beyond
-                      double Tfm = Tdec/hbarC;  // convert it to fm^-1
-                      bulk_coeff1 =  642096.624265727 - 8163329.49562861*Tfm +
-                                     47162768.4292073*pow(Tfm,2) - 162590040.002683*pow(Tfm,3) +
-                                     369637951.096896*pow(Tfm,4) - 578181331.809836*pow(Tfm,5) +
-                                     629434830.225675*pow(Tfm,6) - 470493661.096657*pow(Tfm,7) +
-                                     230936465.421*pow(Tfm,8) - 67175218.4629078*pow(Tfm,9) +
-                                     8789472.32652964*pow(Tfm,10);
-
-                      bulk_coeff2 =  1.18171174036192 - 17.6740645873717*Tfm +
-                                     136.298469057177*pow(Tfm,2) - 635.999435106846*pow(Tfm,3) +
-                                     1918.77100633321*pow(Tfm,4) - 3836.32258307711*pow(Tfm,5) +
-                                     5136.35746882372*pow(Tfm,6) - 4566.22991441914*pow(Tfm,7) +
-                                     2593.45375240886*pow(Tfm,8) - 853.908199724349*pow(Tfm,9) +
-                                     124.260460450113*pow(Tfm,10) ;
-                  }
+                      bulkPi = surf->bulkPi/hbarC;   // need unit in fm^-4 for the parameterization
+                  getbulkvisCoefficients(Tdec, bulkvisCoefficients);
               }
 
               for (int k=0; k<eta_tab_length; k++)
@@ -285,13 +269,11 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
                       {
 
                           double E_over_T = pdotu/Tdec;
-                          // bulk delta f is
-                          delta_f_bulk = -1.0*(1.-sign*f0)/E_over_T*bulk_coeff1*(mass*mass/Tdec/Tdec/3. - bulk_coeff2*E_over_T*E_over_T)*bulkPi;
+                          delta_f_bulk = -1.0*(1.-sign*f0)/E_over_T*bulkvisCoefficients[0]*(mass*mass/Tdec/Tdec/3. - bulkvisCoefficients[1]*E_over_T*E_over_T)*bulkPi;
                       }
                   }
 
                   double result;
-
                   //if(1 + deltaf + bulk_deltaf < 0.0) //set results to zero when delta f turns whole expression to negative
                   //   result = 0.0;
                   //else
@@ -801,25 +783,51 @@ bool EmissionFunctionArray::particles_are_the_same(int idx1, int idx2)
 
 void EmissionFunctionArray::getbulkvisCoefficients(double Tdec, double* bulkvisCoefficients)
 {
-   if(INCLUDE_BULKDELTAF == 1)
+   double Tdec_fm = Tdec/hbarC;  // [1/fm]
+   if(bulk_deltaf_kind == 0)       // 14 moment expansion
    {
-      double Tdec_fm = Tdec/hbarC;  // [1/fm]
-
-      // load from file
-      bulkvisCoefficients[0] = bulkdf_coeff->interp(1, 2, Tdec_fm, 5)/pow(hbarC, 3);  //B0 [fm^3/GeV^3]
-      bulkvisCoefficients[1] = bulkdf_coeff->interp(1, 3, Tdec_fm, 5)/pow(hbarC, 2);  // D0 [fm^3/GeV^2]
-      bulkvisCoefficients[2] = bulkdf_coeff->interp(1, 4, Tdec_fm, 5)/pow(hbarC, 3);  // E0 [fm^3/GeV^3]
-      
-      // parameterization for mu = 0
-      //bulkvisCoefficients[0] = exp(-15.04512474*Tdec_fm + 11.76194266)/pow(hbarC, 3); //B0[fm^3/GeV^3]
-      //bulkvisCoefficients[1] = exp( -12.45699277*Tdec_fm + 11.4949293)/hbarC/hbarC;  // D0 [fm^3/GeV^2]
-      //bulkvisCoefficients[2] = -exp(-14.45087586*Tdec_fm + 11.62716548)/pow(hbarC, 3);  // E0 [fm^3/GeV^3]
+        // load from file
+        bulkvisCoefficients[0] = bulkdf_coeff->interp(1, 2, Tdec_fm, 5)/pow(hbarC, 3);  //B0 [fm^3/GeV^3]
+        bulkvisCoefficients[1] = bulkdf_coeff->interp(1, 3, Tdec_fm, 5)/pow(hbarC, 2);  // D0 [fm^3/GeV^2]
+        bulkvisCoefficients[2] = bulkdf_coeff->interp(1, 4, Tdec_fm, 5)/pow(hbarC, 3);  // E0 [fm^3/GeV^3]
+        // parameterization for mu = 0
+        //bulkvisCoefficients[0] = exp(-15.04512474*Tdec_fm + 11.76194266)/pow(hbarC, 3); //B0[fm^3/GeV^3]
+        //bulkvisCoefficients[1] = exp( -12.45699277*Tdec_fm + 11.4949293)/hbarC/hbarC;  // D0 [fm^3/GeV^2]
+        //bulkvisCoefficients[2] = -exp(-14.45087586*Tdec_fm + 11.62716548)/pow(hbarC, 3);  // E0 [fm^3/GeV^3]
    }
-   else
+   else if(bulk_deltaf_kind == 1)  // relaxation type
    {
-      bulkvisCoefficients[0] = 0.0; //B0[fm^3/GeV]
-      bulkvisCoefficients[1] = 0.0;  // D0 [fm^3/GeV^2]
-      bulkvisCoefficients[2] = 0.0;  // E0 [fm^3/GeV^3]
+       // parameterization from JF
+       // A Polynomial fit to each coefficient -- X is the temperature in fm^-1
+       // Both fits are reliable between T=100 -- 180 MeV , do not trust it beyond
+       double Tdec_fm_power[11];    // cache the polynomial power of Tdec_fm
+       Tdec_fm_power[1] = Tdec_fm;
+       for(int ipower = 2; ipower < 11; ipower++)
+           Tdec_fm_power[ipower] = Tdec_fm_power[ipower-1]*Tdec_fm;
+
+       bulkvisCoefficients[0] = (  642096.624265727 
+                                 - 8163329.49562861*Tdec_fm_power[1] 
+                                 + 47162768.4292073*Tdec_fm_power[2] 
+                                 - 162590040.002683*Tdec_fm_power[3] 
+                                 + 369637951.096896*Tdec_fm_power[4] 
+                                 - 578181331.809836*Tdec_fm_power[5] 
+                                 + 629434830.225675*Tdec_fm_power[6] 
+                                 - 470493661.096657*Tdec_fm_power[7] 
+                                 + 230936465.421*Tdec_fm_power[8] 
+                                 - 67175218.4629078*Tdec_fm_power[9] 
+                                 + 8789472.32652964*Tdec_fm_power[10]);
+
+       bulkvisCoefficients[1] = (  1.18171174036192 
+                                 - 17.6740645873717*Tdec_fm_power[1]
+                                 + 136.298469057177*Tdec_fm_power[2] 
+                                 - 635.999435106846*Tdec_fm_power[3] 
+                                 + 1918.77100633321*Tdec_fm_power[4] 
+                                 - 3836.32258307711*Tdec_fm_power[5] 
+                                 + 5136.35746882372*Tdec_fm_power[6] 
+                                 - 4566.22991441914*Tdec_fm_power[7] 
+                                 + 2593.45375240886*Tdec_fm_power[8] 
+                                 - 853.908199724349*Tdec_fm_power[9]
+                                 + 124.260460450113*Tdec_fm_power[10]);
    }
    return;
 }
