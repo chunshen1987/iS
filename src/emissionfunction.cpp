@@ -269,7 +269,8 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
                       {
 
                           double E_over_T = pdotu/Tdec;
-                          delta_f_bulk = -1.0*(1.-sign*f0)/E_over_T*bulkvisCoefficients[0]*(mass*mass/Tdec/Tdec/3. - bulkvisCoefficients[1]*E_over_T*E_over_T)*bulkPi;
+                          double mass_over_T = mass/Tdec;
+                          delta_f_bulk = -1.0*(1.-sign*f0)/E_over_T*bulkvisCoefficients[0]*(mass_over_T*mass_over_T/3. - bulkvisCoefficients[1]*E_over_T*E_over_T)*bulkPi;
                       }
                   }
 
