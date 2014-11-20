@@ -5,8 +5,11 @@ hydro_mode = 1                    # mode for reading in freeze out information
 
 turn_on_bulk = 1                  # include bulk viscous corrections in delta f
 bulk_deltaf_kind = 1              # type of bulk delta f
-                                  # 0: 14 moment method
+                                  # 0: 14 moment method (old)
                                   # 1: relaxation method
+                                  # 2: 14 moment method (alpha = 0)
+                                  # 3: 14 moment method (alpha = 1/2)
+                                  # 4: 14 moment method (alpha = 1)
 
 turn_on_shear = 1                 # include shear viscous corrections in delta f
 f0_is_not_small = 1               # include (1 \pm f_0) factor in delta f
