@@ -150,7 +150,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
   double *bulkvisCoefficients;
   if(bulk_deltaf_kind == 0)
       bulkvisCoefficients = new double [3];
-  else if (bulk_deltaf_kind == 1)
+  else
       bulkvisCoefficients = new double [2];
 
 
@@ -232,7 +232,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
               {
                   if(bulk_deltaf_kind == 0)
                       bulkPi = surf->bulkPi;
-                  else if(bulk_deltaf_kind == 1)
+                  else
                       bulkPi = surf->bulkPi/hbarC;   // need unit in fm^-4 for the parameterization
                   getbulkvisCoefficients(Tdec, bulkvisCoefficients);
               }
