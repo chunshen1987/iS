@@ -111,7 +111,9 @@ int read_FOdata::read_in_chemical_potentials(string path, int FO_length, FO_surf
            }
        }
        ifstream particletable;
-       if(IEOS_music == 3)         // s95p-v1-PCE150
+       if(IEOS_music == 2)
+           N_stableparticle = 0;
+       else if(IEOS_music == 3)         // s95p-v1-PCE150
            particletable.open("EOS/EOS_tables/s95p-v1-PCE150/EOS_particletable.dat");
        else if(IEOS_music == 4)   // s95p-v1-PCE155
            particletable.open("EOS/EOS_tables/s95p-v1-PCE155/EOS_particletable.dat");
@@ -346,6 +348,50 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf
          surf_ptr[i].da2 = surf_ptr[i].da2/deta;
          surf_ptr[i].da3 = surf_ptr[i].da3/deta;
      }
+  }
+  else
+  {
+       // determine deta
+       ostringstream config_file;
+       config_file << path << "/input";
+       double eta_size;
+       int n_eta;
+       ifstream configuration(config_file.str().c_str());
+       string temp1;
+       string temp_name;
+       while(!configuration.eof())
+       {
+           getline(configuration, temp1);
+           stringstream ss(temp1);
+           ss >> temp_name;
+           if(temp_name == "Eta_grid_size")
+           {
+              ss >> eta_size;
+              break;
+           }
+       }
+       configuration.close();
+       configuration.open(config_file.str().c_str());
+       while(!configuration.eof())
+       {
+           getline(configuration, temp1);
+           stringstream ss(temp1);
+           ss >> temp_name;
+           if(temp_name == "Grid_size_in_eta")
+           {
+              ss >> n_eta;
+              break;
+           }
+       }
+       configuration.close();
+       deta = eta_size/n_eta;
+       for(int i = 0; i < length; i++)
+       {
+          surf_ptr[i].da0 = surf_ptr[i].da0/deta;
+          surf_ptr[i].da1 = surf_ptr[i].da1/deta;
+          surf_ptr[i].da2 = surf_ptr[i].da2/deta;
+          surf_ptr[i].da3 = surf_ptr[i].da3/deta;
+       }
   }
   cout << "done" << endl;
   return;

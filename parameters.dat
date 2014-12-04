@@ -4,7 +4,7 @@ hydro_mode = 1                    # mode for reading in freeze out information
                                   # 2: reads outputs from MUSIC full (3+1)-d
 
 turn_on_bulk = 1                  # include bulk viscous corrections in delta f
-bulk_deltaf_kind = 2              # type of bulk delta f
+bulk_deltaf_kind = 1              # type of bulk delta f
                                   # 0: 14 moment method (old)
                                   # 1: relaxation method
                                   # 2: 14 moment method (alpha = 0)
