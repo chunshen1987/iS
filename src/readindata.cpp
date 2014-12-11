@@ -21,6 +21,7 @@ read_FOdata::read_FOdata(ParameterReader* paraRdr_in, string path_in)
    path = path_in;
    mode = paraRdr->getVal("hydro_mode");
    turn_on_bulk = paraRdr->getVal("turn_on_bulk");
+   turn_on_muB = paraRdr->getVal("turn_on_muB");
    n_eta_skip = 0;
 }
 
@@ -114,20 +115,36 @@ int read_FOdata::read_in_chemical_potentials(string path, int FO_length, FO_surf
        if(IEOS_music == 2)        // s95p-v1
            N_stableparticle = 0;
        else if(IEOS_music == 3)   // s95p-v1-PCE150
+       {
            particletable.open("EOS/EOS_tables/s95p-v1-PCE150/EOS_particletable.dat");
+           particletable >> N_stableparticle;
+           particletable.close();
+       }
        else if(IEOS_music == 4)   // s95p-v1-PCE155
+       {
            particletable.open("EOS/EOS_tables/s95p-v1-PCE155/EOS_particletable.dat");
+           particletable >> N_stableparticle;
+           particletable.close();
+       }
        else if(IEOS_music == 5)   // s95p-v1-PCE160
+       {
            particletable.open("EOS/EOS_tables/s95p-v1-PCE160/EOS_particletable.dat");
+           particletable >> N_stableparticle;
+           particletable.close();
+       }
        else if(IEOS_music == 6)   // s95p-v0-PCE165
+       {
            particletable.open("EOS/EOS_tables/s95p-v0-PCE165/EOS_particletable.dat");
+           particletable >> N_stableparticle;
+           particletable.close();
+       }
+       else if(IEOS_music == 10)
+           N_stableparticle = 0;
        else
        {
            cout << "invalid IEOS_music: " << IEOS_music << endl;
            exit(-1);
        }
-       particletable >> N_stableparticle;
-       particletable.close();
    }
    
    //read particle resonance decay table
@@ -329,6 +346,13 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf
          }
          else
              surf_ptr[idx].bulkPi = 0.0;
+         if(turn_on_muB == 1)
+         {
+             ss >> dummy;
+             surf_ptr[idx].muB = dummy*hbarC;
+         }
+         else
+             surf_ptr[idx].muB = 0.0;
          idx++;
      }
      else
@@ -465,6 +489,13 @@ void read_FOdata::read_FOsurfdat_MUSIC(int length, FO_surf* surf_ptr)
      }
      else
          surf_ptr[i].bulkPi = 0.0;
+     if(turn_on_muB == 1)
+     {
+         surfdat >> dummy;
+         surf_ptr[i].muB = dummy*hbarC;
+     }
+     else
+         surf_ptr[i].muB = 0.0;
   }
   surfdat.close();
   cout << "done" << endl;

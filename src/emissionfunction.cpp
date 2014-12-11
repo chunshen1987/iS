@@ -34,6 +34,7 @@ EmissionFunctionArray::EmissionFunctionArray(ParameterReader* paraRdr_in, double
   // get control parameters
   CALCULATEDED3P = paraRdr->getVal("calculate_dEd3p");
   INCLUDE_BULKDELTAF = paraRdr->getVal("turn_on_bulk");
+  INCLUDE_MUB = paraRdr->getVal("turn_on_muB");
   INCLUDE_DELTAF = paraRdr->getVal("turn_on_shear");
   GROUPING_PARTICLES = paraRdr->getVal("grouping_particles");
   PARTICLE_DIFF_TOLERANCE = paraRdr->getVal("particle_diff_tolerance");
@@ -142,6 +143,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
   double mass = particle->mass;
   double sign = particle->sign;
   double degen = particle->gspin;
+  int baryon = particle->baryon;
 
   double prefactor = 1.0/(8.0*(M_PI*M_PI*M_PI))/hbarC/hbarC/hbarC;
 
@@ -224,6 +226,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
               double pi12 = surf->pi12;
               double pi22 = surf->pi22;
               double pi33 = surf->pi33;
+              double muB = surf->muB;
               double bulkPi = 0.0;
               double deltaf_prefactor = 0.0;
               if(INCLUDE_DELTAF)
@@ -245,7 +248,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
                   double pz = mT*hypertrig_etas_table[k][1];
 
                   double pdotu = pt*gammaT - px*ux - py*uy;
-                  double expon = (pdotu - mu) / Tdec;
+                  double expon = (pdotu - mu - baryon*muB) / Tdec;
                   double f0 = 1./(exp(expon)+sign);       //thermal equilibrium distributions
 
                   // Must adjust this to be correct for the p*del \tau term.  The plus sign is
@@ -782,6 +785,7 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(int to_order
 bool EmissionFunctionArray::particles_are_the_same(int idx1, int idx2)
 {
     if (particles[idx1].sign!=particles[idx2].sign) return false;
+    if (particles[idx1].baryon!=particles[idx2].baryon && INCLUDE_MUB) return false;
     if (abs(particles[idx1].mass-particles[idx2].mass) / (particles[idx2].mass+1e-30) > PARTICLE_DIFF_TOLERANCE) return false;
     for (long l=0; l<FO_length; l++)
     {

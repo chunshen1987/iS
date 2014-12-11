@@ -48,6 +48,7 @@ class read_FOdata
         string path;
         int mode;
         int turn_on_bulk;
+        int turn_on_muB;
         int n_eta_skip;
         int IEOS_music;
 

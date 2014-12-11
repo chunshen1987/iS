@@ -15,6 +15,7 @@ private:
 
   int CALCULATEDED3P;
   int INCLUDE_BULKDELTAF, INCLUDE_DELTAF;
+  int INCLUDE_MUB;
   int bulk_deltaf_kind;
   int GROUPING_PARTICLES;
   double PARTICLE_DIFF_TOLERANCE;
