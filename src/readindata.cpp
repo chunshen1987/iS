@@ -65,6 +65,13 @@ int read_FOdata::get_number_of_freezeout_cells()
       Table block_file(surface_file.str().c_str());
       number_of_cells = block_file.getNumberOfRows();
    }
+   else if (mode == 10)  // outputs from hydro analysis
+   {
+      ostringstream surface_file;
+      surface_file << path << "/hyper_surface_2+1d.dat";
+      Table block_file(surface_file.str().c_str());
+      number_of_cells = block_file.getNumberOfRows();
+   }
  
    return(number_of_cells);
 }
@@ -77,6 +84,8 @@ void read_FOdata::read_in_freeze_out_data(int length, FO_surf* surf_ptr)
       read_FOsurfdat_MUSIC_boost_invariant(length, surf_ptr);
    else if (mode == 2)   // MUSIC full (3+1)-d outputs
       read_FOsurfdat_MUSIC(length, surf_ptr);
+   else if (mode == 10)   // MUSIC boost invariant outputs
+      read_FOsurfdat_hydro_analysis_boost_invariant(length, surf_ptr);
 
    return;
 }
@@ -145,6 +154,12 @@ int read_FOdata::read_in_chemical_potentials(string path, int FO_length, FO_surf
            cout << "invalid IEOS_music: " << IEOS_music << endl;
            exit(-1);
        }
+   }
+   if(mode == 10)      // hydro_analysis output
+   {
+       ifstream particletable("EOS/EOS_particletable.dat");
+       particletable >> N_stableparticle;
+       particletable.close();
    }
    
    //read particle resonance decay table
@@ -417,6 +432,71 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, FO_surf* surf
           surf_ptr[i].da3 = surf_ptr[i].da3/deta;
        }
   }
+  cout << "done" << endl;
+  return;
+}
+
+void read_FOdata::read_FOsurfdat_hydro_analysis_boost_invariant(int length, FO_surf* surf_ptr)
+{
+  cout<<" -- Read spatial positions of freeze out surface from hydro_analysis (boost-invariant) ...";
+  ostringstream surfdat_stream;
+  string input;
+  double temp_tau, temp_xpt, temp_ypt;
+  double temp_vx, temp_vy;
+  int idx = 0;
+  surfdat_stream << path << "/hyper_surface_2+1d.dat";
+  ifstream surfdat(surfdat_stream.str().c_str());
+  for(int i = 0; i < length; i++)
+  {
+     getline(surfdat, input, '\n' );
+     stringstream ss(input);
+     ss >> temp_tau >> temp_xpt >> temp_ypt;
+
+     // freeze out position
+     surf_ptr[idx].tau = temp_tau;
+     surf_ptr[idx].xpt = temp_xpt;
+     surf_ptr[idx].ypt = temp_ypt;
+
+     // freeze out normal vectors
+     ss >> surf_ptr[idx].da0;
+     ss >> surf_ptr[idx].da1;
+     ss >> surf_ptr[idx].da2;
+
+     // thermodynamic quantities at freeze out
+     ss >> surf_ptr[idx].Tdec;
+
+     // flow velocity
+     ss >> temp_vx >> temp_vy;
+
+     surf_ptr[idx].u0 = 1./sqrt(1. - temp_vx*temp_vx - temp_vy*temp_vy);
+     surf_ptr[idx].u1 = surf_ptr[idx].u0*temp_vx;
+     surf_ptr[idx].u2 = surf_ptr[idx].u0*temp_vy;
+
+     surf_ptr[idx].Edec = 0.0;   
+     surf_ptr[idx].muB = 0.0;
+     surf_ptr[idx].Pdec = 0.0;
+     surf_ptr[idx].Bn = 0.0;
+     surf_ptr[idx].muS = 0.0;
+
+     // dissipative quantities at freeze out
+     surf_ptr[idx].pi00 = 0.0;  // GeV/fm^3
+     surf_ptr[idx].pi01 = 0.0;
+     surf_ptr[idx].pi02 = 0.0;
+     surf_ptr[idx].pi03 = 0.0;
+     surf_ptr[idx].pi11 = 0.0;
+     surf_ptr[idx].pi12 = 0.0;
+     surf_ptr[idx].pi13 = 0.0;
+     surf_ptr[idx].pi22 = 0.0;
+     surf_ptr[idx].pi23 = 0.0;
+     surf_ptr[idx].pi33 = 0.0;
+
+     surf_ptr[idx].bulkPi = 0.0;
+     surf_ptr[idx].muB = 0.0;
+
+     idx++;
+  }
+  surfdat.close();
+
   cout << "done" << endl;
   return;
 }
