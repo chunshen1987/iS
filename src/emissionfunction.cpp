@@ -292,9 +292,9 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
                   }
 
                   double result;
-                  //if(1. + delta_f_shear + delta_f_bulk < 0.0) //set results to zero when delta f turns whole expression to negative
-                  //   result = 0.0;
-                  //else
+                  if(1. + delta_f_shear + delta_f_bulk < 0.0) //set results to zero when delta f turns whole expression to negative
+                     result = 0.0;
+                  else
                      result = prefactor*degen*f0*(1. + delta_f_shear + delta_f_bulk)*pdsigma*tau;
 
                   dN_ptdptdphidy_tmp += result*delta_eta;
