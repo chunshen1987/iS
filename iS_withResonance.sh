@@ -6,4 +6,3 @@
 
 ./iInteSp.e
 
-(cd extractThermal; ./extractThermal3.sh ../results)
