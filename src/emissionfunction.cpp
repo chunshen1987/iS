@@ -1,11 +1,13 @@
-#include<iostream>
-#include<sstream>
-#include<string>
-#include<fstream>
-#include<cmath>
-#include<iomanip>
-#include<vector>
-#include<stdio.h>
+// Copyright 2012 Chun Shen and Zhi Qiu
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <fstream>
+#include <cmath>
+#include <iomanip>
+#include <vector>
+#include <algorithm>
+#include <stdio.h>
 
 #include "main.h"
 #include "readindata.h"
@@ -119,263 +121,252 @@ EmissionFunctionArray::EmissionFunctionArray(ParameterReader* paraRdr_in, double
 }
 
 
-EmissionFunctionArray::~EmissionFunctionArray()
-{
-  delete dN_ptdptdphidy;
-  if(CALCULATEDED3P == 1) delete dE_ptdptdphidy;
-  delete[] chosen_particles_01_table;
-  delete[] chosen_particles_sampling_table;
-  delete bulkdf_coeff;
+EmissionFunctionArray::~EmissionFunctionArray() {
+    delete dN_ptdptdphidy;
+    if (CALCULATEDED3P == 1)
+        delete dE_ptdptdphidy;
+    delete[] chosen_particles_01_table;
+    delete[] chosen_particles_sampling_table;
+    delete bulkdf_coeff;
 }
 
 
-void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx)
+void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx) {
 // Calculate dN_xxx array.
-{
-  last_particle_idx = particle_idx;
-  Stopwatch sw;
-  sw.tic();
+    last_particle_idx = particle_idx;
+    Stopwatch sw;
+    sw.tic();
 
-  double y = particle_y;
-  particle_info* particle;
-  particle = &particles[particle_idx];
+    double y = particle_y;
+    particle_info* particle;
+    particle = &particles[particle_idx];
 
-  double mass = particle->mass;
-  double sign = particle->sign;
-  double degen = particle->gspin;
-  int baryon = particle->baryon;
+    double mass = particle->mass;
+    double sign = particle->sign;
+    double degen = particle->gspin;
+    int baryon = particle->baryon;
 
-  double prefactor = 1.0/(8.0*(M_PI*M_PI*M_PI))/hbarC/hbarC/hbarC;
+    double prefactor = 1.0/(8.0*(M_PI*M_PI*M_PI))/hbarC/hbarC/hbarC;
 
-  FO_surf* surf = &FOsurf_ptr[0];
+    FO_surf* surf = &FOsurf_ptr[0];
 
-  double *bulkvisCoefficients;
-  if(bulk_deltaf_kind == 0)
-      bulkvisCoefficients = new double [3];
-  else
-      bulkvisCoefficients = new double [2];
+    double *bulkvisCoefficients;
+    if (bulk_deltaf_kind == 0)
+        bulkvisCoefficients = new double[3];
+    else
+        bulkvisCoefficients = new double[2];
 
 
-  // for intermediate results
-  double dN_ptdptdphidy_tab[pT_tab_length][phi_tab_length];
-  double dE_ptdptdphidy_tab[pT_tab_length][phi_tab_length];
-  for (int i=0; i<pT_tab_length; i++)
-  for (int j=0; j<phi_tab_length; j++)
-  {
-    dN_ptdptdphidy_tab[i][j] = 0.0;
-    dE_ptdptdphidy_tab[i][j] = 0.0;
-  }
+    // for intermediate results
+    double dN_ptdptdphidy_tab[pT_tab_length][phi_tab_length];
+    double dE_ptdptdphidy_tab[pT_tab_length][phi_tab_length];
+    for (int i = 0; i < pT_tab_length; i++) {
+        for (int j = 0; j < phi_tab_length; j++) {
+            dN_ptdptdphidy_tab[i][j] = 0.0;
+            dE_ptdptdphidy_tab[i][j] = 0.0;
+        }
+    }
 
-  // pre-calculated variables //!!!!!!
-  double trig_phi_table[phi_tab_length][2]; // 2: 0,1-> cos,sin
-  for (int j=0; j<phi_tab_length; j++)
-  {
-    double phi = phi_tab->get(1,j+1);
-    trig_phi_table[j][0] = cos(phi);
-    trig_phi_table[j][1] = sin(phi);
-  }
+    // pre-calculated variables //!!!!!!
+    double trig_phi_table[phi_tab_length][2]; // 2: 0,1-> cos,sin
+    for (int j = 0; j < phi_tab_length; j++) {
+        double phi = phi_tab->get(1, j+1);
+        trig_phi_table[j][0] = cos(phi);
+        trig_phi_table[j][1] = sin(phi);
+    }
 
-  double hypertrig_etas_table[eta_tab_length][2]; // 2: 0,1-> cosh,sinh
-  double delta_eta_tab[eta_tab_length]; // cache it
-  for (int k=0; k<eta_tab_length; k++)
-  {
-    double eta_s = eta_tab->get(1,k+1);
-    hypertrig_etas_table[k][0] = cosh(y-eta_s);
-    hypertrig_etas_table[k][1] = sinh(y-eta_s);
-    delta_eta_tab[k] = eta_tab->get(2,k+1);
-  }
+    double hypertrig_etas_table[eta_tab_length][2];   // 2: 0,1-> cosh,sinh
+    double delta_eta_tab[eta_tab_length];             // cache it
+    for (int k = 0; k < eta_tab_length; k++) {
+        double eta_s = eta_tab->get(1, k+1);
+        hypertrig_etas_table[k][0] = cosh(y - eta_s);
+        hypertrig_etas_table[k][1] = sinh(y - eta_s);
+        delta_eta_tab[k] = eta_tab->get(2, k+1);
+    }
 
-  //---------------------------
-  // THE main summation loop
-  //---------------------------
-  double progress_total = pT_tab_length*phi_tab_length;
-  if (AMOUNT_OF_OUTPUT>0) print_progressbar(-1);
+    //---------------------------
+    // THE main summation loop
+    //---------------------------
+    double progress_total = pT_tab_length*phi_tab_length;
+    if (AMOUNT_OF_OUTPUT > 0)
+        print_progressbar(-1);
 
-  for (int i=0; i<pT_tab_length; i++)
-  {
-      double pT = pT_tab->get(1,i+1); 
-      double mT = sqrt(mass*mass + pT*pT);
+    for (int i = 0; i < pT_tab_length; i++) {
+        double pT = pT_tab->get(1, i+1);
+        double mT = sqrt(mass*mass + pT*pT);
 
-      for (int j=0; j<phi_tab_length; j++)
-      {
-          double px = pT*trig_phi_table[j][0];
-          double py = pT*trig_phi_table[j][1];
+        for (int j = 0; j < phi_tab_length; j++) {
+            double px = pT*trig_phi_table[j][0];
+            double py = pT*trig_phi_table[j][1];
 
-          double dN_ptdptdphidy_tmp = 0.0;
-          double dE_ptdptdphidy_tmp = 0.0;
+            double dN_ptdptdphidy_tmp = 0.0;
+            double dE_ptdptdphidy_tmp = 0.0;
 
-          for (long l=0; l<FO_length; l++)
-          {
-              surf = &FOsurf_ptr[l];
+            for (long l = 0; l < FO_length; l++) {
+                surf = &FOsurf_ptr[l];
 
-              double Tdec = surf->Tdec;
-              double Pdec = surf->Pdec;
-              double Edec = surf->Edec;
-              double mu = surf->particle_mu[last_particle_idx];
-              double tau = surf->tau;
-              double gammaT = surf->u0;
-              double ux = surf->u1;
-              double uy = surf->u2;
-              double da0 = surf->da0;
-              double da1 = surf->da1;
-              double da2 = surf->da2;
-              double pi00 = surf->pi00;
-              double pi01 = surf->pi01;
-              double pi02 = surf->pi02;
-              double pi11 = surf->pi11;
-              double pi12 = surf->pi12;
-              double pi22 = surf->pi22;
-              double pi33 = surf->pi33;
-              double muB = surf->muB;
-              double bulkPi = 0.0;
-              double deltaf_prefactor = 0.0;
-              if(INCLUDE_DELTAF)
-                  deltaf_prefactor = 1.0/(2.0*Tdec*Tdec*(Edec+Pdec));
-              if(INCLUDE_BULKDELTAF == 1)
-              {
-                  if(bulk_deltaf_kind == 0)
-                      bulkPi = surf->bulkPi;
-                  else
-                      bulkPi = surf->bulkPi/hbarC;   // unit in fm^-4
-                  getbulkvisCoefficients(Tdec, bulkvisCoefficients);
-              }
+                double Tdec = surf->Tdec;
+                double Pdec = surf->Pdec;
+                double Edec = surf->Edec;
+                double mu = surf->particle_mu[last_particle_idx];
+                double tau = surf->tau;
+                double gammaT = surf->u0;
+                double ux = surf->u1;
+                double uy = surf->u2;
+                double ueta = surf->u3;
+                double da0 = surf->da0;
+                double da1 = surf->da1;
+                double da2 = surf->da2;
+                double da3 = surf->da3;
+                double pi00 = surf->pi00;
+                double pi01 = surf->pi01;
+                double pi02 = surf->pi02;
+                double pi03 = surf->pi03;
+                double pi11 = surf->pi11;
+                double pi12 = surf->pi12;
+                double pi13 = surf->pi13;
+                double pi22 = surf->pi22;
+                double pi23 = surf->pi23;
+                double pi33 = surf->pi33;
+                double muB = surf->muB;
+                double bulkPi = 0.0;
+                double deltaf_prefactor = 0.0;
+                if (INCLUDE_DELTAF)
+                    deltaf_prefactor = 1.0/(2.0*Tdec*Tdec*(Edec+Pdec));
+                if (INCLUDE_BULKDELTAF == 1) {
+                    if (bulk_deltaf_kind == 0)
+                        bulkPi = surf->bulkPi;
+                    else
+                        bulkPi = surf->bulkPi/hbarC;   // unit in fm^-4
+                    getbulkvisCoefficients(Tdec, bulkvisCoefficients);
+                }
 
-              for (int k=0; k<eta_tab_length; k++)
-              {
-                  double delta_eta = delta_eta_tab[k];
+                for (int k = 0; k < eta_tab_length; k++) {
+                    double delta_eta = delta_eta_tab[k];
 
-                  double pt = mT*hypertrig_etas_table[k][0];
-                  double pz = mT*hypertrig_etas_table[k][1];
+                    double pt = mT*hypertrig_etas_table[k][0];
+                    double pz = mT*hypertrig_etas_table[k][1];
 
-                  //thermal equilibrium distributions
-                  double pdotu = pt*gammaT - px*ux - py*uy;
-                  double expon = (pdotu - mu - baryon*muB) / Tdec;
-                  double f0 = 1./(exp(expon)+sign);   
+                    // thermal equilibrium distributions
+                    double pdotu = pt*gammaT - px*ux - py*uy - pz*ueta;
+                    double expon = (pdotu - mu - baryon*muB)/Tdec;
+                    double f0 = 1./(exp(expon) + sign);
 
-                  // Must adjust this to be correct for the p*del \tau term.  
-                  // The plus sign is due to the fact that the DA# variables 
-                  // are for the covariant surface integration
-                  double pdsigma = pt*da0 + px*da1 + py*da2;
+                    // Must adjust this to be correct for the p*del \tau term.
+                    // The plus sign is due to the fact that the DA# variables
+                    // are for the covariant surface integration
+                    double pdsigma = (
+                        tau*(pt*da0 + px*da1 + py*da2 + pz*da3/tau));
 
-                  //viscous corrections
-                  double delta_f_shear = 0.0;
-                  if(INCLUDE_DELTAF)
-                  {
-                      double Wfactor = (
-                          pt*pt*pi00 - 2.0*pt*px*pi01 - 2.0*pt*py*pi02 
-                          + px*px*pi11 + 2.0*px*py*pi12 + py*py*pi22 
-                          + pz*pz*pi33);
-                      delta_f_shear = ((1 - F0_IS_NOT_SMALL*sign*f0)
-                                       *Wfactor*deltaf_prefactor);
-                  }
-                  double delta_f_bulk = 0.0;
-                  if (INCLUDE_BULKDELTAF == 1)
-                  {
-                      if(bulk_deltaf_kind == 0)
-                          delta_f_bulk = (
-                              - (1. - F0_IS_NOT_SMALL*sign*f0)*bulkPi
-                                *(bulkvisCoefficients[0]*mass*mass 
-                                  + bulkvisCoefficients[1]*pdotu 
-                                  + bulkvisCoefficients[2]*pdotu*pdotu));
-                      else if (bulk_deltaf_kind == 1)
-                      {
+                    // viscous corrections
+                    double delta_f_shear = 0.0;
+                    if (INCLUDE_DELTAF) {
+                        double Wfactor = (
+                            pt*pt*pi00 - 2.0*pt*px*pi01 - 2.0*pt*py*pi02
+                            - 2.0*pt*pz*pi03
+                            + px*px*pi11 + 2.0*px*py*pi12 + 2.0*px*pz*pi13
+                            + py*py*pi22 + 2.0*py*pz*pi23
+                            + pz*pz*pi33);
+                        delta_f_shear = ((1 - F0_IS_NOT_SMALL*sign*f0)
+                                         *Wfactor*deltaf_prefactor);
+                    }
+                    double delta_f_bulk = 0.0;
+                    if (INCLUDE_BULKDELTAF == 1) {
+                        if (bulk_deltaf_kind == 0) {
+                            delta_f_bulk = (
+                                - (1. - F0_IS_NOT_SMALL*sign*f0)*bulkPi
+                                  *(bulkvisCoefficients[0]*mass*mass
+                                    + bulkvisCoefficients[1]*pdotu
+                                    + bulkvisCoefficients[2]*pdotu*pdotu));
+                        } else if (bulk_deltaf_kind == 1) {
+                            double E_over_T = pdotu/Tdec;
+                            double mass_over_T = mass/Tdec;
+                            delta_f_bulk = (
+                                -1.0*(1.-sign*f0)/E_over_T
+                                *bulkvisCoefficients[0]
+                                *(mass_over_T*mass_over_T/3.
+                                  - bulkvisCoefficients[1]*E_over_T*E_over_T)
+                                *bulkPi);
+                        } else if (bulk_deltaf_kind == 2) {
+                            double E_over_T = pdotu/Tdec;
+                            delta_f_bulk = (-1.*(1.-sign*f0)
+                                            *(-bulkvisCoefficients[0]
+                                              + bulkvisCoefficients[1]*E_over_T)
+                                            *bulkPi);
+                        } else if (bulk_deltaf_kind == 3) {
+                            double E_over_T = pdotu/Tdec;
+                            delta_f_bulk = (-1.0*(1.-sign*f0)/sqrt(E_over_T)
+                                            *(- bulkvisCoefficients[0]
+                                              + bulkvisCoefficients[1]*E_over_T)
+                                            *bulkPi);
+                        } else if (bulk_deltaf_kind == 4) {
+                            double E_over_T = pdotu/Tdec;
+                            delta_f_bulk = (-1.0*(1.-sign*f0)
+                                            *(bulkvisCoefficients[0]
+                                              - bulkvisCoefficients[1]/E_over_T)
+                                            *bulkPi);
+                        }
+                    }
 
-                          double E_over_T = pdotu/Tdec;
-                          double mass_over_T = mass/Tdec;
-                          delta_f_bulk = (
-                              -1.0*(1.-sign*f0)/E_over_T*bulkvisCoefficients[0]
-                              *(mass_over_T*mass_over_T/3. 
-                                - bulkvisCoefficients[1]*E_over_T*E_over_T)
-                              *bulkPi);
-                      }
-                      else if (bulk_deltaf_kind == 2)
-                      {
-                          double E_over_T = pdotu/Tdec;
-                          delta_f_bulk = (-1.*(1.-sign*f0)
-                                          *(-bulkvisCoefficients[0] 
-                                            + bulkvisCoefficients[1]*E_over_T)
-                                          *bulkPi);
-                      }
-                      else if (bulk_deltaf_kind == 3)
-                      {
-                          double E_over_T = pdotu/Tdec;
-                          delta_f_bulk = (-1.0*(1.-sign*f0)/sqrt(E_over_T)
-                                          *(-bulkvisCoefficients[0] 
-                                            + bulkvisCoefficients[1]*E_over_T)
-                                          *bulkPi);
-                      }
-                      else if (bulk_deltaf_kind == 4)
-                      {
-                          double E_over_T = pdotu/Tdec;
-                          delta_f_bulk = (-1.0*(1.-sign*f0)
-                                          *(bulkvisCoefficients[0] 
-                                            - bulkvisCoefficients[1]/E_over_T)
-                                          *bulkPi);
-                      }
-                  }
+                    double ratio = (
+                        min(1., fabs(1./(delta_f_shear + delta_f_bulk))));
+                    double result;
+                    result = (prefactor*degen*pdsigma*f0
+                              *(1. + (delta_f_shear + delta_f_bulk)*ratio));
 
-                  double ratio = min(1., 
-                                     fabs(1./(delta_f_shear + delta_f_bulk)));
-                  double result;
-                  result = (prefactor*degen*pdsigma*tau*f0
-                            *(1. + (delta_f_shear + delta_f_bulk)*ratio));
+                    dN_ptdptdphidy_tmp += result*delta_eta;
+                    if (CALCULATEDED3P == 1)
+                        dE_ptdptdphidy_tmp += result*delta_eta*mT;
+                }  // k
+            }  // l
 
-                  dN_ptdptdphidy_tmp += result*delta_eta;
-                  if(CALCULATEDED3P == 1)
-                      dE_ptdptdphidy_tmp += result*delta_eta*mT;
-              } // k
-          } // l
+            dN_ptdptdphidy_tab[i][j] = dN_ptdptdphidy_tmp;
+            if (CALCULATEDED3P == 1)
+                dE_ptdptdphidy_tab[i][j] = dE_ptdptdphidy_tmp;
+            if (AMOUNT_OF_OUTPUT > 0)
+                print_progressbar((i*phi_tab_length+j)/progress_total);
+        }
+        // cout << int(100.0*(i+1)/pT_tab_length) << "% completed" << endl;
+    }
+    if (AMOUNT_OF_OUTPUT > 0)
+        print_progressbar(1);
 
-          dN_ptdptdphidy_tab[i][j] = dN_ptdptdphidy_tmp;
-          if (CALCULATEDED3P == 1)
-              dE_ptdptdphidy_tab[i][j] = dE_ptdptdphidy_tmp;
-          if (AMOUNT_OF_OUTPUT>0)
-              print_progressbar((i*phi_tab_length+j)/progress_total);
-      }
-  //cout << int(100.0*(i+1)/pT_tab_length) << "% completed" << endl;
-  }
-  if (AMOUNT_OF_OUTPUT>0)
-      print_progressbar(1);
+    for (int i = 0; i < pT_tab_length; i++) {
+        for (int j = 0; j < phi_tab_length; j++) {
+            dN_ptdptdphidy->set(i+1,j+1,dN_ptdptdphidy_tab[i][j]);
+            if (CALCULATEDED3P == 1)
+                dE_ptdptdphidy->set(i+1,j+1,dE_ptdptdphidy_tab[i][j]);
+        }
+    }
 
-  for (int i=0; i<pT_tab_length; i++)
-  for (int j=0; j<phi_tab_length; j++)
-  {
-    dN_ptdptdphidy->set(i+1,j+1,dN_ptdptdphidy_tab[i][j]);
-    if(CALCULATEDED3P == 1)
-        dE_ptdptdphidy->set(i+1,j+1,dE_ptdptdphidy_tab[i][j]);
-  }
-
-  delete [] bulkvisCoefficients;
-
-  sw.toc();
-  cout << endl << "Finished " << sw.takeTime() << " seconds." << endl;
+    delete [] bulkvisCoefficients;
+    sw.toc();
+    cout << endl << "Finished " << sw.takeTime() << " seconds." << endl;
 }
 
-void EmissionFunctionArray::write_dN_ptdptdphidy_toFile()
+void EmissionFunctionArray::write_dN_ptdptdphidy_toFile() {
 // Append the dN_xxx results to file.
-{
-  ofstream of1(dN_ptdptdphidy_filename.c_str(), ios_base::app);
-  dN_ptdptdphidy->printTable(of1);
-  of1.close();
+    ofstream of1(dN_ptdptdphidy_filename.c_str(), ios_base::app);
+    dN_ptdptdphidy->printTable(of1);
+    of1.close();
 
-  if(CALCULATEDED3P == 1)
-  {
-     ofstream of2(dE_ptdptdphidy_filename.c_str(), ios_base::app);
-     dE_ptdptdphidy->printTable(of2);
-     of2.close();
-  }
+    if (CALCULATEDED3P == 1) {
+        ofstream of2(dE_ptdptdphidy_filename.c_str(), ios_base::app);
+        dE_ptdptdphidy->printTable(of2);
+        of2.close();
+    }
 }
 
 
 //***************************************************************************
-void EmissionFunctionArray::calculate_flows(int to_order, string flow_differential_filename_in, string flow_integrated_filename_in)
+void EmissionFunctionArray::calculate_flows(
+        int to_order, string flow_differential_filename_in, 
+        string flow_integrated_filename_in) {
 // Calculate flow from order from_order to to_order and store them to files.
-{
-  /*
-  cout << endl
-       <<"*************************************************"
-       << endl
-       << "Function calculate_flows started... " << endl;*/
+  // cout << endl
+  //      <<"*************************************************"
+  //      << endl
+  //      << "Function calculate_flows started... " << endl;
   Stopwatch sw;
   sw.tic();
 
