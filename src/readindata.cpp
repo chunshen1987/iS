@@ -48,6 +48,7 @@ int read_FOdata::get_number_of_freezeout_cells() {
         }
         number_of_cells = num_temp;
         n_eta_skip = block_file.getNumberOfRows()/number_of_cells;
+        cout << "n_eta_skip = " << n_eta_skip << endl;
     } else if (mode == 2) {  // outputs from MUSIC full (3+1)-d
         ostringstream surface_file;
         surface_file << path << "/surface.dat";

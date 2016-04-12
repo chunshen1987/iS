@@ -937,9 +937,9 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_and_flows_4all(
                 } else {
                     cout << " -- Calculating dN_ptdptdphidy... " << endl;
                     if (hydro_mode == 0 || hydro_mode == 1) {
-                        calculate_dN_ptdptdphidy(m);
+                        calculate_dN_ptdptdphidy(particle_idx);
                     } else if (hydro_mode == 2) {
-                        calculate_dN_ptdptdphidy_3D(m);
+                        calculate_dN_ptdptdphidy_3D(particle_idx);
                     } else {
                         cout << "EmissionFunctionArray::"
                             << "calculate_dN_ptdptdphidy_and_flows_4all: "
