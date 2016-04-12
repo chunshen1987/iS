@@ -1,92 +1,78 @@
-// ver 1.1
-#include<iostream>
-#include<sstream>
-#include<string>
-#include<fstream>
-#include<cmath>
-#include<iomanip>
-#include<stdlib.h>
+// Copyright 2012 Chun Shen and Zhi Qiu
+#include <stdlib.h>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <fstream>
+#include <cmath>
+#include <iomanip>
 
-#include "main.h"
-#include "readindata.h"
-#include "arsenal.h"
-#include "ParameterReader.h"
-#include "Table.h"
+#include "./main.h"
+#include "./readindata.h"
+#include "./arsenal.h"
+#include "./ParameterReader.h"
+#include "./Table.h"
 
 using namespace std;
 
-read_FOdata::read_FOdata(ParameterReader* paraRdr_in, string path_in)
-{
-   paraRdr = paraRdr_in;
-   path = path_in;
-   mode = paraRdr->getVal("hydro_mode");
-   turn_on_bulk = paraRdr->getVal("turn_on_bulk");
-   turn_on_muB = paraRdr->getVal("turn_on_muB");
-   n_eta_skip = 0;
+read_FOdata::read_FOdata(ParameterReader* paraRdr_in, string path_in) {
+    paraRdr = paraRdr_in;
+    path = path_in;
+    mode = paraRdr->getVal("hydro_mode");
+    turn_on_bulk = paraRdr->getVal("turn_on_bulk");
+    turn_on_muB = paraRdr->getVal("turn_on_muB");
+    n_eta_skip = 0;
 }
 
-read_FOdata::~read_FOdata()
-{
-
+read_FOdata::~read_FOdata() {
 }
 
-int read_FOdata::get_number_of_freezeout_cells()
-{
-   int number_of_cells = 0;
-   if (mode == 0)  // outputs from VISH2+1
-   {
-      ostringstream decdatfile;
-      decdatfile << path << "/decdat2.dat";
-      Table block_file(decdatfile.str().c_str());
-      number_of_cells = block_file.getNumberOfRows();
-   }
-   else if (mode == 1)  // outputs from MUSIC boost-invariant
-   {
-      ostringstream surface_file;
-      surface_file << path << "/surface.dat";
-      Table block_file(surface_file.str().c_str());
+int read_FOdata::get_number_of_freezeout_cells() {
+    int number_of_cells = 0;
+    if (mode == 0) {  // outputs from VISH2+1
+        ostringstream decdatfile;
+        decdatfile << path << "/decdat2.dat";
+        Table block_file(decdatfile.str().c_str());
+        number_of_cells = block_file.getNumberOfRows();
+    } else if (mode == 1) {  // outputs from MUSIC boost-invariant
+        ostringstream surface_file;
+        surface_file << path << "/surface.dat";
+        Table block_file(surface_file.str().c_str());
 
-      // determine number of the eta slides that are output
-      double eta_target = block_file.get(4, 1);
-      int num_temp = 0;
-      for(int i = 0; i < block_file.getNumberOfRows(); i++)
-      {
-         if(block_file.get(4, i+1) == eta_target)
-            num_temp++;
-      }
-      number_of_cells = num_temp;
-      n_eta_skip = block_file.getNumberOfRows()/number_of_cells;
-   }
-   else if (mode == 2)  // outputs from MUSIC full (3+1)-d
-   {
-      ostringstream surface_file;
-      surface_file << path << "/surface.dat";
-      Table block_file(surface_file.str().c_str());
-      number_of_cells = block_file.getNumberOfRows();
-   }
-   else if (mode == 10)  // outputs from hydro analysis
-   {
-      ostringstream surface_file;
-      surface_file << path << "/hyper_surface_2+1d.dat";
-      Table block_file(surface_file.str().c_str());
-      number_of_cells = block_file.getNumberOfRows();
-   }
- 
-   return(number_of_cells);
+        // determine number of the eta slides that are output
+        double eta_target = block_file.get(4, 1);
+        int num_temp = 0;
+        for (int i = 0; i < block_file.getNumberOfRows(); i++) {
+            if(block_file.get(4, i+1) == eta_target)
+                num_temp++;
+        }
+        number_of_cells = num_temp;
+        n_eta_skip = block_file.getNumberOfRows()/number_of_cells;
+    } else if (mode == 2) {  // outputs from MUSIC full (3+1)-d
+        ostringstream surface_file;
+        surface_file << path << "/surface.dat";
+        Table block_file(surface_file.str().c_str());
+        number_of_cells = block_file.getNumberOfRows();
+    } else if (mode == 10) {  // outputs from hydro analysis
+        ostringstream surface_file;
+        surface_file << path << "/hyper_surface_2+1d.dat";
+        Table block_file(surface_file.str().c_str());
+        number_of_cells = block_file.getNumberOfRows();
+    }
+    return(number_of_cells);
 }
 
-void read_FOdata::read_in_freeze_out_data(int length, FO_surf* surf_ptr)
-{
-   if(mode == 0)     // VISH2+1 outputs
-      read_FOsurfdat_VISH2p1(length, surf_ptr);
-   else if (mode == 1)   // MUSIC boost invariant outputs
-      read_FOsurfdat_MUSIC_boost_invariant(length, surf_ptr);
-   else if (mode == 2)   // MUSIC full (3+1)-d outputs
-      read_FOsurfdat_MUSIC(length, surf_ptr);
-   else if (mode == 10)   // MUSIC boost invariant outputs
-      read_FOsurfdat_hydro_analysis_boost_invariant(length, surf_ptr);
-
-   return;
+void read_FOdata::read_in_freeze_out_data(int length, FO_surf* surf_ptr) {
+    if (mode == 0) {    // VISH2+1 outputs
+        read_FOsurfdat_VISH2p1(length, surf_ptr);
+    } else if (mode == 1) {  // MUSIC boost invariant outputs
+        read_FOsurfdat_MUSIC_boost_invariant(length, surf_ptr);
+    } else if (mode == 2) {  // MUSIC full (3+1)-d outputs
+        read_FOsurfdat_MUSIC(length, surf_ptr);
+    } else if (mode == 10) {  // MUSIC boost invariant outputs
+        read_FOsurfdat_hydro_analysis_boost_invariant(length, surf_ptr);
+    }
+    return;
 }
 
 int read_FOdata::read_in_chemical_potentials(
@@ -215,6 +201,8 @@ void read_FOdata::read_decdat(int length, FO_surf* surf_ptr)
   {
      decdat >> surf_ptr[i].tau;
      surf_ptr[i].eta = 0.0;
+     surf_ptr[i].cosh_eta = 1.0;
+     surf_ptr[i].sinh_eta = 0.0;
 
      decdat >> surf_ptr[i].da0;
      decdat >> surf_ptr[i].da1;
@@ -309,24 +297,26 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length,
      ss >> temp_tau >> temp_xpt >> temp_ypt >> temp_eta;
      if (i == 0)
          eta_target = temp_eta;
-     if (fabs(temp_eta -eta_target) > 1e-6)
+     if (fabs(temp_eta - eta_target) > 1e-6)
          continue;
      // freeze out position
      surf_ptr[idx].tau = temp_tau;
      surf_ptr[idx].xpt = temp_xpt;
      surf_ptr[idx].ypt = temp_ypt;
-     surf_ptr[idx].eta = temp_eta;
+     surf_ptr[idx].eta = 0.0;
+     surf_ptr[i].cosh_eta = 1.0;
+     surf_ptr[i].sinh_eta = 0.0;
 
      // freeze out normal vectors
      ss >> surf_ptr[idx].da0;
      ss >> surf_ptr[idx].da1;
      ss >> surf_ptr[idx].da2;
+     ss >> surf_ptr[idx].da3;
      if (n_eta_skip > 1) {
-         double temp_da3;
-         ss >> temp_da3;
-         surf_ptr[idx].da3 = temp_da3/deta;
-     } else {
-         ss >> surf_ptr[idx].da3;
+        surf_ptr[idx].da0 /= deta;
+        surf_ptr[idx].da1 /= deta;
+        surf_ptr[idx].da2 /= deta;
+        surf_ptr[idx].da3 /= deta;
      }
 
      // flow velocity
@@ -337,7 +327,7 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length,
 
      // thermodynamic quantities at freeze out
      ss >> dummy;
-     surf_ptr[idx].Edec = dummy*hbarC;   
+     surf_ptr[idx].Edec = dummy*hbarC;
      ss >> dummy;
      surf_ptr[idx].Tdec = dummy*hbarC;
      ss >> dummy;
@@ -471,6 +461,9 @@ void read_FOdata::read_FOsurfdat_MUSIC(int length, FO_surf* surf_ptr)
      surfdat >> surf_ptr[i].xpt;
      surfdat >> surf_ptr[i].ypt;
      surfdat >> surf_ptr[i].eta;
+     double temp_eta = surf_ptr[i].eta;
+     surf_ptr[i].cosh_eta = cosh(temp_eta);
+     surf_ptr[i].sinh_eta = sinh(temp_eta);
 
      // freeze out normal vectors
      surfdat >> surf_ptr[i].da0;
