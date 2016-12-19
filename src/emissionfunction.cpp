@@ -47,6 +47,8 @@ EmissionFunctionArray::EmissionFunctionArray(
     F0_IS_NOT_SMALL = paraRdr->getVal("f0_is_not_small");
     bulk_deltaf_kind = paraRdr->getVal("bulk_deltaf_kind");
     hydro_mode = paraRdr->getVal("hydro_mode");
+    flag_restrict_deltaf = paraRdr->getVal("restrict_deltaf");
+    deltaf_max_ratio = paraRdr->getVal("deltaf_max_ratio");
 
     if (CALCULATEDED3P == 1) {
         dE_ptdptdphidy = new Table(pT_tab_length, phi_tab_length);
@@ -309,8 +311,11 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy(int particle_idx) {
                         }
                     }
 
-                    double ratio = (
-                        min(1., fabs(1./(delta_f_shear + delta_f_bulk))));
+                    double ratio = 1.0;
+                    if (flag_restrict_deltaf == 1) {
+                        ratio = min(1., fabs(deltaf_max_ratio
+                                             /(delta_f_shear + delta_f_bulk)));
+                    }
                     double result;
                     result = (prefactor*degen*pdsigma*f0
                               *(1. + (delta_f_shear + delta_f_bulk)*ratio));
@@ -512,7 +517,11 @@ void EmissionFunctionArray::calculate_dN_ptdptdphidy_3D(int particle_idx) {
                     }
                 }
 
-                double ratio = min(1., fabs(1./(delta_f_shear + delta_f_bulk)));
+                double ratio = 1.0;
+                if (flag_restrict_deltaf == 1) {
+                    ratio = min(1., fabs(deltaf_max_ratio
+                                         /(delta_f_shear + delta_f_bulk)));
+                }
                 double result;
                 result = (prefactor*degen*pdsigma*f0
                           *(1. + (delta_f_shear + delta_f_bulk)*ratio));

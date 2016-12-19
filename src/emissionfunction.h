@@ -22,6 +22,8 @@ class EmissionFunctionArray {
     double PARTICLE_DIFF_TOLERANCE;
     int USE_HISTORIC_FORMAT;
     int F0_IS_NOT_SMALL;
+    int flag_restrict_deltaf;
+    double deltaf_max_ratio;
 
     int hydro_mode;
     double particle_y;

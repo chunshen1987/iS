@@ -277,8 +277,7 @@ void read_FOdata::read_FOsurfdat_VISH2p1(int length, FO_surf* surf_ptr)
 }
 
 void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, 
-                                                       FO_surf* surf_ptr)
-{
+                                                       FO_surf* surf_ptr) {
   cout << " -- Read spatial positions of freeze out surface from MUSIC "
        << "(boost-invariant) ...";
   ostringstream surfdat_stream;
@@ -290,8 +289,7 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length,
   int idx = 0;
   surfdat_stream << path << "/surface.dat";
   ifstream surfdat(surfdat_stream.str().c_str());
-  for(int i = 0; i < length*n_eta_skip; i++)
-  {
+  for(int i = 0; i < length*n_eta_skip; i++) {
      getline(surfdat, input, '\n' );
      stringstream ss(input);
 
@@ -359,15 +357,13 @@ void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length,
      surf_ptr[idx].pi23 = dummy*hbarC;
      ss >> dummy;
      surf_ptr[idx].pi33 = dummy*hbarC;
-     if(turn_on_bulk == 1)
-     {
+     if (turn_on_bulk == 1) {
          ss >> dummy;
          surf_ptr[idx].bulkPi = dummy*hbarC;  // GeV/fm^3
-     }
-     else
+     } else {
          surf_ptr[idx].bulkPi = 0.0;
-     if(turn_on_muB == 1)
-     {
+     }
+     if (turn_on_muB == 1) {
          ss >> dummy;
          surf_ptr[idx].muB = dummy*hbarC;
      }

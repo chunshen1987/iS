@@ -82,6 +82,7 @@ int main(int argc, char *argv[]) {
     Table phi_tab("tables/phi_gauss_table.dat");
     // eta uniform dist table
     Table eta_tab("tables/eta_gauss_table_15.dat");
+    //Table eta_tab("tables/eta_uni_table.dat");
     EmissionFunctionArray efa(paraRdr, 0.0, &chosen_particles, &pT_tab,
                               &phi_tab, &eta_tab, particle, Nparticle,
                               FOsurf_ptr, FO_length);
