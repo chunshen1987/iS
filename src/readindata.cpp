@@ -21,7 +21,47 @@ read_FOdata::read_FOdata(ParameterReader* paraRdr_in, string path_in) {
     mode = paraRdr->getVal("hydro_mode");
     turn_on_bulk = paraRdr->getVal("turn_on_bulk");
     turn_on_muB = paraRdr->getVal("turn_on_muB");
-    n_eta_skip = 0;
+    surface_in_binary = false;
+    
+    if (mode == 1 || mode == 2) {
+        // determine read in format in surface.dat from MUSIC simulation
+        cout << "read in hyper-surface from MUSIC simulations ..." << endl;
+        ostringstream config_file;
+        config_file << path << "/music_input";
+        ifstream configuration(config_file.str().c_str());
+        if (!configuration.is_open()) {
+            cout << "read_FOdata::read_FOdata: can not find configuration file"
+                 << " " << config_file.str() << endl;
+            exit(1);
+        }
+        string temp1;
+        string temp_name;
+        while (!configuration.eof()) {
+            getline(configuration, temp1);
+            stringstream ss(temp1);
+            ss >> temp_name;
+            if (temp_name == "Include_Bulk_Visc_Yes_1_No_0") {
+                ss >> turn_on_bulk;
+            }
+            if (temp_name == "Include_Rhob_Yes_1_No_0") {
+                ss >> turn_on_muB;
+            }
+            if (temp_name == "freeze_surface_in_binary") {
+                int flag_b;
+                ss >> flag_b;
+                if (flag_b == 1)
+                    surface_in_binary = true;
+            }
+        }
+        configuration.close();
+        if (surface_in_binary)
+            cout << "the hyper-surface surface is in the binary format." << endl;
+        if (turn_on_bulk == 1)
+            cout << "the hyper-surface includes bulk viscosity." << endl;
+        if (turn_on_muB == 1)
+            cout << "the hyper-surface includes net baryon density." << endl;
+    }
+    n_eta_skip = 1;
 }
 
 read_FOdata::~read_FOdata() {
@@ -37,23 +77,34 @@ int read_FOdata::get_number_of_freezeout_cells() {
     } else if (mode == 1) {  // outputs from MUSIC boost-invariant
         ostringstream surface_file;
         surface_file << path << "/surface.dat";
-        Table block_file(surface_file.str().c_str());
+        if (surface_in_binary) {
+            number_of_cells = get_number_of_lines_of_binary_surface_file(
+                                                        surface_file.str());
+            n_eta_skip = 1;
+        } else {
+            Table block_file(surface_file.str().c_str());
 
-        // determine number of the eta slides that are output
-        double eta_target = block_file.get(4, 1);
-        int num_temp = 0;
-        for (int i = 0; i < block_file.getNumberOfRows(); i++) {
-            if(block_file.get(4, i+1) == eta_target)
-                num_temp++;
+            // determine number of the eta slides that are output
+            double eta_target = block_file.get(4, 1);
+            int num_temp = 0;
+            for (int i = 0; i < block_file.getNumberOfRows(); i++) {
+                if(block_file.get(4, i+1) == eta_target)
+                    num_temp++;
+            }
+            number_of_cells = num_temp;
+            n_eta_skip = block_file.getNumberOfRows()/number_of_cells;
         }
-        number_of_cells = num_temp;
-        n_eta_skip = block_file.getNumberOfRows()/number_of_cells;
         cout << "n_eta_skip = " << n_eta_skip << endl;
     } else if (mode == 2) {  // outputs from MUSIC full (3+1)-d
         ostringstream surface_file;
         surface_file << path << "/surface.dat";
-        Table block_file(surface_file.str().c_str());
-        number_of_cells = block_file.getNumberOfRows();
+        if (surface_in_binary == 0) {
+            number_of_cells = get_number_of_lines_of_binary_surface_file(
+                                                    surface_file.str());
+        } else {
+            Table block_file(surface_file.str().c_str());
+            number_of_cells = block_file.getNumberOfRows();
+        }
     } else if (mode == 10) {  // outputs from hydro analysis
         ostringstream surface_file;
         surface_file << path << "/hyper_surface_2+1d.dat";
@@ -62,6 +113,21 @@ int read_FOdata::get_number_of_freezeout_cells() {
     }
     return(number_of_cells);
 }
+
+
+int read_FOdata::get_number_of_lines_of_binary_surface_file(string filename) {
+    std::ifstream surface_file(filename.c_str(), std::ios::binary);
+    int count = 0;
+    float temp = 0.;
+    while(surface_file) {
+        surface_file.read((char*) &temp, sizeof(float));
+        count++;
+    }
+    int counted_line = count/32;
+    surface_file.close();
+    return(counted_line);
+}
+
 
 void read_FOdata::read_in_freeze_out_data(int length, FO_surf* surf_ptr) {
     if (mode == 0) {    // VISH2+1 outputs
@@ -73,6 +139,7 @@ void read_FOdata::read_in_freeze_out_data(int length, FO_surf* surf_ptr) {
     } else if (mode == 10) {  // MUSIC boost invariant outputs
         read_FOsurfdat_hydro_analysis_boost_invariant(length, surf_ptr);
     }
+    regulate_surface_cells(length, surf_ptr);
     return;
 }
 
@@ -278,103 +345,159 @@ void read_FOdata::read_FOsurfdat_VISH2p1(int length, FO_surf* surf_ptr)
 
 void read_FOdata::read_FOsurfdat_MUSIC_boost_invariant(int length, 
                                                        FO_surf* surf_ptr) {
-  cout << " -- Read spatial positions of freeze out surface from MUSIC "
-       << "(boost-invariant) ...";
-  ostringstream surfdat_stream;
-  double dummy;
-  string input;
-  double temp_tau, temp_xpt, temp_ypt, temp_eta;
-  double eta_target = 0.0;
-  double deta = 5.0;
-  int idx = 0;
-  surfdat_stream << path << "/surface.dat";
-  ifstream surfdat(surfdat_stream.str().c_str());
-  for(int i = 0; i < length*n_eta_skip; i++) {
-     getline(surfdat, input, '\n' );
-     stringstream ss(input);
+    cout << " -- Read spatial positions of freeze out surface from MUSIC "
+         << "(boost-invariant) ...";
+    ostringstream surfdat_stream;
+    double dummy;
+    string input;
+    double temp_tau, temp_xpt, temp_ypt, temp_eta;
+    double eta_target = 0.0;
+    double deta = 5.0;
+    int idx = 0;
+    surfdat_stream << path << "/surface.dat";
+    ifstream surfdat;
+    if (surface_in_binary) {
+        surfdat.open(surfdat_stream.str().c_str(), std::ios::binary);
+    } else {
+        surfdat.open(surfdat_stream.str().c_str());
+    }
+    for (int i = 0; i < length*n_eta_skip; i++) {
+        if (surface_in_binary) {
+            float array[32];
+            for (int ii = 0; ii < 32; ii++) {
+                float temp = 0.;
+                surfdat.read((char*)&temp, sizeof(float));
+                array[ii] = temp;
+            }
+            surf_ptr[idx].tau = array[0];
+            surf_ptr[idx].xpt = array[1];
+            surf_ptr[idx].ypt = array[2];
+            surf_ptr[idx].eta = 0.0;
+            surf_ptr[idx].cosh_eta = 1.0;
+            surf_ptr[idx].sinh_eta = 0.0;
 
-     ss >> temp_tau >> temp_xpt >> temp_ypt >> temp_eta;
-     if (i == 0)
-         eta_target = temp_eta;
-     if (fabs(temp_eta - eta_target) > 1e-6)
-         continue;
-     // freeze out position
-     surf_ptr[idx].tau = temp_tau;
-     surf_ptr[idx].xpt = temp_xpt;
-     surf_ptr[idx].ypt = temp_ypt;
-     surf_ptr[idx].eta = 0.0;
-     surf_ptr[i].cosh_eta = 1.0;
-     surf_ptr[i].sinh_eta = 0.0;
+            surf_ptr[idx].da0 = array[4];
+            surf_ptr[idx].da1 = array[5];
+            surf_ptr[idx].da2 = array[6];
+            surf_ptr[idx].da3 = 0.0;
+            if (n_eta_skip > 1) {
+               surf_ptr[idx].da0 /= deta;
+               surf_ptr[idx].da1 /= deta;
+               surf_ptr[idx].da2 /= deta;
+               surf_ptr[idx].da3 /= deta;
+            }
 
-     // freeze out normal vectors
-     ss >> surf_ptr[idx].da0;
-     ss >> surf_ptr[idx].da1;
-     ss >> surf_ptr[idx].da2;
-     ss >> surf_ptr[idx].da3;
-     if (n_eta_skip > 1) {
-        surf_ptr[idx].da0 /= deta;
-        surf_ptr[idx].da1 /= deta;
-        surf_ptr[idx].da2 /= deta;
-        surf_ptr[idx].da3 /= deta;
-     }
+            surf_ptr[idx].u0  = array[8];
+            surf_ptr[idx].u1  = array[9];
+            surf_ptr[idx].u2  = array[10];
+            surf_ptr[idx].u3  = array[11];
 
-     // flow velocity
-     ss >> surf_ptr[idx].u0;
-     ss >> surf_ptr[idx].u1;
-     ss >> surf_ptr[idx].u2;
-     ss >> surf_ptr[idx].u3;
+            surf_ptr[idx].Edec = array[12]*hbarC;   
+            surf_ptr[idx].Tdec = array[13]*hbarC;
+            surf_ptr[idx].muB  = array[14]*hbarC;
+            surf_ptr[idx].Pdec = array[15]*surf_ptr[idx].Tdec - surf_ptr[idx].Edec;
+            surf_ptr[idx].muS  = 0.0;
+            
+            surf_ptr[idx].pi00 = array[16]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi01 = array[17]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi02 = array[18]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi03 = array[19]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi11 = array[20]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi12 = array[21]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi13 = array[22]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi22 = array[23]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi23 = array[24]*hbarC;  // GeV/fm^3
+            surf_ptr[idx].pi33 = array[25]*hbarC;  // GeV/fm^3
 
-     // thermodynamic quantities at freeze out
-     ss >> dummy;
-     surf_ptr[idx].Edec = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].Tdec = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].muB = dummy*hbarC;
-     ss >> dummy;              // (e+P)/T
-     surf_ptr[idx].Pdec = dummy*surf_ptr[idx].Tdec - surf_ptr[idx].Edec;
-     surf_ptr[idx].Bn = 0.0;
-     surf_ptr[idx].muS = 0.0;
+            surf_ptr[idx].bulkPi = array[26]*hbarC;   // GeV/fm^3
 
-     // dissipative quantities at freeze out
-     ss >> dummy;                       // 1/fm^4
-     surf_ptr[idx].pi00 = dummy*hbarC;  // GeV/fm^3
-     ss >> dummy;
-     surf_ptr[idx].pi01 = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].pi02 = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].pi03 = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].pi11 = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].pi12 = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].pi13 = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].pi22 = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].pi23 = dummy*hbarC;
-     ss >> dummy;
-     surf_ptr[idx].pi33 = dummy*hbarC;
-     if (turn_on_bulk == 1) {
-         ss >> dummy;
-         surf_ptr[idx].bulkPi = dummy*hbarC;  // GeV/fm^3
-     } else {
-         surf_ptr[idx].bulkPi = 0.0;
-     }
-     if (turn_on_muB == 1) {
-         ss >> dummy;
-         surf_ptr[idx].muB = dummy*hbarC;
-     }
-     else
-         surf_ptr[idx].muB = 0.0;
-     idx++;
-  }
-  surfdat.close();
+            surf_ptr[idx].Bn   = array[27];             // 1/fm^3
+        } else {
+            getline(surfdat, input, '\n' );
+            stringstream ss(input);
 
-  cout << "done" << endl;
-  return;
+            ss >> temp_tau >> temp_xpt >> temp_ypt >> temp_eta;
+            if (i == 0)
+                eta_target = temp_eta;
+            if (fabs(temp_eta - eta_target) > 1e-6)
+                continue;
+            // freeze out position
+            surf_ptr[idx].tau = temp_tau;
+            surf_ptr[idx].xpt = temp_xpt;
+            surf_ptr[idx].ypt = temp_ypt;
+            surf_ptr[idx].eta = 0.0;
+            surf_ptr[idx].cosh_eta = 1.0;
+            surf_ptr[idx].sinh_eta = 0.0;
+
+            // freeze out normal vectors
+            ss >> surf_ptr[idx].da0;
+            ss >> surf_ptr[idx].da1;
+            ss >> surf_ptr[idx].da2;
+            ss >> surf_ptr[idx].da3;
+            if (n_eta_skip > 1) {
+               surf_ptr[idx].da0 /= deta;
+               surf_ptr[idx].da1 /= deta;
+               surf_ptr[idx].da2 /= deta;
+               surf_ptr[idx].da3 /= deta;
+            }
+
+            // flow velocity
+            ss >> surf_ptr[idx].u0;
+            ss >> surf_ptr[idx].u1;
+            ss >> surf_ptr[idx].u2;
+            ss >> surf_ptr[idx].u3;
+
+            // thermodynamic quantities at freeze out
+            ss >> dummy;
+            surf_ptr[idx].Edec = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].Tdec = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].muB = dummy*hbarC;
+            ss >> dummy;              // (e+P)/T
+            surf_ptr[idx].Pdec = dummy*surf_ptr[idx].Tdec - surf_ptr[idx].Edec;
+            surf_ptr[idx].Bn = 0.0;
+            surf_ptr[idx].muS = 0.0;
+
+            // dissipative quantities at freeze out
+            ss >> dummy;                       // 1/fm^4
+            surf_ptr[idx].pi00 = dummy*hbarC;  // GeV/fm^3
+            ss >> dummy;
+            surf_ptr[idx].pi01 = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].pi02 = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].pi03 = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].pi11 = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].pi12 = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].pi13 = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].pi22 = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].pi23 = dummy*hbarC;
+            ss >> dummy;
+            surf_ptr[idx].pi33 = dummy*hbarC;
+            if (turn_on_bulk == 1) {
+                ss >> dummy;
+                surf_ptr[idx].bulkPi = dummy*hbarC;  // GeV/fm^3
+            } else {
+                surf_ptr[idx].bulkPi = 0.0;
+            }
+            if (turn_on_muB == 1) {
+                ss >> dummy;
+                surf_ptr[idx].Bn = dummy;
+            } else {
+                surf_ptr[idx].Bn = 0.0;
+            }
+        }
+        idx++;
+    }
+    surfdat.close();
+
+    cout << "done" << endl;
 }
 
 void read_FOdata::read_FOsurfdat_hydro_analysis_boost_invariant(
@@ -444,87 +567,132 @@ void read_FOdata::read_FOsurfdat_hydro_analysis_boost_invariant(
   return;
 }
 
-void read_FOdata::read_FOsurfdat_MUSIC(int length, FO_surf* surf_ptr)
-{
-  cout<<" -- Read spatial positions of freeze out surface from MUSIC...";
-  ostringstream surfdat_stream;
-  double dummy;
-  surfdat_stream << path << "/surface.dat";
-  ifstream surfdat(surfdat_stream.str().c_str());
-  for(int i=0; i<length; i++)
-  {
-     // freeze out position
-     surfdat >> surf_ptr[i].tau;
-     surfdat >> surf_ptr[i].xpt;
-     surfdat >> surf_ptr[i].ypt;
-     surfdat >> surf_ptr[i].eta;
-     double temp_eta = surf_ptr[i].eta;
-     surf_ptr[i].cosh_eta = cosh(temp_eta);
-     surf_ptr[i].sinh_eta = sinh(temp_eta);
+void read_FOdata::read_FOsurfdat_MUSIC(int length, FO_surf* surf_ptr) {
+    cout<<" -- Read spatial positions of freeze out surface from MUSIC...";
+    ostringstream surfdat_stream;
+    double dummy;
+    surfdat_stream << path << "/surface.dat";
+    ifstream surfdat;
+    if (surface_in_binary) {
+        surfdat.open(surfdat_stream.str().c_str(), std::ios::binary);
+    } else {
+        surfdat.open(surfdat_stream.str().c_str());
+    }
+    for (int i = 0; i < length; i++) {
+        if (surface_in_binary) {
+            float array[32];
+            for (int i = 0; i < 32; i++) {
+                float temp = 0.;
+                surfdat.read((char*)&temp, sizeof(float));
+                array[i] = temp;
+            }
+            surf_ptr[i].tau = array[0];
+            surf_ptr[i].xpt = array[1];
+            surf_ptr[i].ypt = array[2];
+            surf_ptr[i].eta = array[3];
+            surf_ptr[i].cosh_eta = cosh(surf_ptr[i].eta);
+            surf_ptr[i].sinh_eta = sinh(surf_ptr[i].eta);
 
-     // freeze out normal vectors
-     surfdat >> surf_ptr[i].da0;
-     surfdat >> surf_ptr[i].da1;
-     surfdat >> surf_ptr[i].da2;
-     surfdat >> surf_ptr[i].da3;
+            surf_ptr[i].da0 = array[4];
+            surf_ptr[i].da1 = array[5];
+            surf_ptr[i].da2 = array[6];
+            surf_ptr[i].da3 = array[7];
+            surf_ptr[i].u0  = array[8];
+            surf_ptr[i].u1  = array[9];
+            surf_ptr[i].u2  = array[10];
+            surf_ptr[i].u3  = array[11];
 
-     // flow velocity
-     surfdat >> surf_ptr[i].u0;
-     surfdat >> surf_ptr[i].u1;
-     surfdat >> surf_ptr[i].u2;
-     surfdat >> surf_ptr[i].u3;
+            surf_ptr[i].Edec = array[12]*hbarC;   
+            surf_ptr[i].Tdec = array[13]*hbarC;
+            surf_ptr[i].muB  = array[14]*hbarC;
+            surf_ptr[i].Pdec = array[15]*surf_ptr[i].Tdec - surf_ptr[i].Edec;
+            surf_ptr[i].muS  = 0.0;
+            
+            surf_ptr[i].pi00 = array[16]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi01 = array[17]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi02 = array[18]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi03 = array[19]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi11 = array[20]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi12 = array[21]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi13 = array[22]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi22 = array[23]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi23 = array[24]*hbarC;  // GeV/fm^3
+            surf_ptr[i].pi33 = array[25]*hbarC;  // GeV/fm^3
 
-     // thermodynamic quantities at freeze out
-     surfdat >> dummy;
-     surf_ptr[i].Edec = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].Tdec = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].muB = dummy*hbarC;
-     surfdat >> dummy;                    //(e+p)/T
-     surf_ptr[i].Pdec = dummy*surf_ptr[i].Tdec - surf_ptr[i].Edec;
-     surf_ptr[i].Bn = 0.0;
-     surf_ptr[i].muS = 0.0;
+            surf_ptr[i].bulkPi = array[26]*hbarC;   // GeV/fm^3
 
-     // dissipative quantities at freeze out
-     surfdat >> dummy;
-     surf_ptr[i].pi00 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi01 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi02 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi03 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi11 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi12 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi13 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi22 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi23 = dummy*hbarC;
-     surfdat >> dummy;
-     surf_ptr[i].pi33 = dummy*hbarC;
-     if(turn_on_bulk == 1)
-     {
-         surfdat >> dummy;
-         surf_ptr[i].bulkPi = dummy*hbarC;
-     }
-     else
-         surf_ptr[i].bulkPi = 0.0;
-     if(turn_on_muB == 1)
-     {
-         surfdat >> dummy;
-         surf_ptr[i].muB = dummy*hbarC;
-     }
-     else
-         surf_ptr[i].muB = 0.0;
-  }
-  surfdat.close();
-  cout << "done" << endl;
-  return;
+            surf_ptr[i].Bn   = array[27];             // 1/fm^3
+        } else {
+            // freeze out position
+            surfdat >> surf_ptr[i].tau;
+            surfdat >> surf_ptr[i].xpt;
+            surfdat >> surf_ptr[i].ypt;
+            surfdat >> surf_ptr[i].eta;
+            double temp_eta = surf_ptr[i].eta;
+            surf_ptr[i].cosh_eta = cosh(temp_eta);
+            surf_ptr[i].sinh_eta = sinh(temp_eta);
+
+            // freeze out normal vectors
+            surfdat >> surf_ptr[i].da0;
+            surfdat >> surf_ptr[i].da1;
+            surfdat >> surf_ptr[i].da2;
+            surfdat >> surf_ptr[i].da3;
+
+            // flow velocity
+            surfdat >> surf_ptr[i].u0;
+            surfdat >> surf_ptr[i].u1;
+            surfdat >> surf_ptr[i].u2;
+            surfdat >> surf_ptr[i].u3;
+
+            // thermodynamic quantities at freeze out
+            surfdat >> dummy;
+            surf_ptr[i].Edec = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].Tdec = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].muB = dummy*hbarC;
+            surfdat >> dummy;                    //(e+p)/T
+            surf_ptr[i].Pdec = dummy*surf_ptr[i].Tdec - surf_ptr[i].Edec;
+            surf_ptr[i].Bn = 0.0;
+            surf_ptr[i].muS = 0.0;
+
+            // dissipative quantities at freeze out
+            surfdat >> dummy;
+            surf_ptr[i].pi00 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi01 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi02 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi03 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi11 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi12 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi13 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi22 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi23 = dummy*hbarC;
+            surfdat >> dummy;
+            surf_ptr[i].pi33 = dummy*hbarC;
+            if (turn_on_bulk == 1) {
+                surfdat >> dummy;
+                surf_ptr[i].bulkPi = dummy*hbarC;
+            } else {
+                surf_ptr[i].bulkPi = 0.0;
+            }
+            if (turn_on_muB == 1) {
+                surfdat >> dummy;
+                surf_ptr[i].Bn = dummy;
+            } else {
+                surf_ptr[i].Bn = 0.0;
+            }
+        }
+    }
+    surfdat.close();
+    cout << "done" << endl;
 }
 
 void read_FOdata::read_decdat_mu(int FO_length, int N_stable, double** particle_mu)
@@ -799,3 +967,79 @@ void read_FOdata::calculate_particle_mu(int Nparticle, FO_surf* FOsurf_ptr,
    return;
 }
 
+
+void read_FOdata::regulate_surface_cells(int length, FO_surf* surf_ptr) {
+    double pi_init[4][4];
+    double pi_reg[4][4];
+    double u_flow[4];
+    for (int i = 0; i < length; i++) {
+        surf_ptr[i].u0 = sqrt(1. + surf_ptr[i].u1*surf_ptr[i].u1
+                                 + surf_ptr[i].u2*surf_ptr[i].u2
+                                 + surf_ptr[i].u3*surf_ptr[i].u3);
+        u_flow[0] = surf_ptr[i].u0;
+        u_flow[1] = surf_ptr[i].u1;
+        u_flow[2] = surf_ptr[i].u2;
+        u_flow[3] = surf_ptr[i].u3;
+        pi_init[0][0] = surf_ptr[i].pi00;
+        pi_init[0][1] = surf_ptr[i].pi01;
+        pi_init[0][2] = surf_ptr[i].pi02;
+        pi_init[0][3] = surf_ptr[i].pi03;
+        pi_init[1][0] = surf_ptr[i].pi01;
+        pi_init[1][1] = surf_ptr[i].pi11;
+        pi_init[1][2] = surf_ptr[i].pi12;
+        pi_init[1][3] = surf_ptr[i].pi13;
+        pi_init[2][0] = surf_ptr[i].pi02;
+        pi_init[2][1] = surf_ptr[i].pi12;
+        pi_init[2][2] = surf_ptr[i].pi22;
+        pi_init[2][3] = surf_ptr[i].pi23;
+        pi_init[3][0] = surf_ptr[i].pi03;
+        pi_init[3][1] = surf_ptr[i].pi13;
+        pi_init[3][2] = surf_ptr[i].pi23;
+        pi_init[3][3] = surf_ptr[i].pi33;
+
+        regulate_Wmunu(u_flow, pi_init, pi_reg);
+
+        surf_ptr[i].pi00 = pi_reg[0][0];
+        surf_ptr[i].pi01 = pi_reg[0][1];
+        surf_ptr[i].pi02 = pi_reg[0][2];
+        surf_ptr[i].pi03 = pi_reg[0][3];
+        surf_ptr[i].pi11 = pi_reg[1][1];
+        surf_ptr[i].pi12 = pi_reg[1][2];
+        surf_ptr[i].pi13 = pi_reg[1][3];
+        surf_ptr[i].pi22 = pi_reg[2][2];
+        surf_ptr[i].pi23 = pi_reg[2][3];
+        surf_ptr[i].pi33 = pi_reg[3][3];
+    }
+}
+
+void read_FOdata::regulate_Wmunu(double u[4], double Wmunu[4][4],
+                                 double Wmunu_regulated[4][4]) {
+    double gmunu[4][4] = {
+        {-1, 0, 0, 0},
+        { 0, 1, 0, 0},
+        { 0, 0, 1, 0},
+        { 0, 0, 0, 1}
+    };
+    double u_dot_pi[4];
+    double u_mu[4];
+    for (int i = 0; i < 4; i++) {
+        u_dot_pi[i] = (- u[0]*Wmunu[0][i] + u[1]*Wmunu[1][i] 
+                       + u[2]*Wmunu[2][i] + u[3]*Wmunu[3][i]);
+        u_mu[i] = gmunu[i][i]*u[i];
+    }
+    double tr_pi = - Wmunu[0][0] + Wmunu[1][1] + Wmunu[2][2] + Wmunu[3][3];
+    double u_dot_pi_dot_u = 0.0;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            u_dot_pi_dot_u += u_mu[i]*Wmunu[i][j]*u_mu[j];
+        }
+    }
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            Wmunu_regulated[i][j] = (
+                Wmunu[i][j] + u[i]*u_dot_pi[j] + u[j]*u_dot_pi[i] 
+                + u[i]*u[j]*u_dot_pi_dot_u 
+                - 1./3.*(gmunu[i][j] + u[i]*u[j])*(tr_pi + u_dot_pi_dot_u));
+        }
+    }
+}
